@@ -31,7 +31,7 @@ def imatrix(data,H):
   data = data.reshape(M,M)
   center = c3.find_centroid(data)
   dx  , dy = center[0] , center[1]
-  hx = np.dot(phi(dx, H , M) , np.linalg.inv(ms.B(H*M)).T)
-  hy = np.dot(np.linalg.inv(ms.B(H*M)) , phi(dy, H , M).T)
+  hx = np.dot(phi(-dx, H , M) , np.linalg.inv(ms.B(H*M)).T)
+  hy = np.dot(np.linalg.inv(ms.B(H*M)) , phi(-dy, H , M).T)
   hf = np.kron(hx.T, hy)
   return hf
