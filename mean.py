@@ -58,25 +58,23 @@ class stuff(object):
                           
           self.B[i]   =  np.array([self.d2d[i,m/2-4:m/2+5,-1:].mean(),self.d2d[i,m/2-4:m/2+5,:1].mean(),self.d2d[i,:1,m/2-4:m/2+5].mean(),self.d2d[i,-1:,m/2-4:m/2+5].mean()]).mean()
           
-          #print self.B[i] , self.d2d[i].min()
           self.dm[i]  =  self.data[i]-self.B[i]
           self.F[i]   =  np.sum(self.dm[i])
           self.dm[i] /=  self.F[i]                    
 
-          #plt.imshow(self.dm[i].reshape(25,25), interpolation="None",norm = LogNorm())
-          #plt.colorbar()
-          #plt.show()
+          
           obs = ndimage.interpolation.zoom(self.dm[i].reshape(25,25), self.H, output = None, order=3, mode='constant', cval=0.0, prefilter=True).flatten()
+          
           self.X  =  self.X + shifter.shifter(obs)   
-          #plt.imshow(shifter.shifter(obs).reshape(75,75), interpolation="None",norm = LogNorm())
-          #plt.colorbar()
-          #plt.show()
+         
         self.X /= self.N                           #take the mean of the upsampled normalized shifted ff-subtracted stars
         #self.X[(self.X < 0)] = np.mean(self.X)       #replace negative mean brightnesses with mean pixel-brightness of the initial X  
-        #plt.imshow(self.X.reshape(75,75), interpolation="None" , norm = LogNorm())
-        #plt.colorbar()
-        #plt.show()
-
+        
+        m = int((self.D)**.5)*self.H
+        self.X = self.X.reshape(m,m)
+        self.X[2:-2,2:-2]*=0
+        self.X = self.X.flatten()
+        
      def grad_X(self , params , *args):
         
         self.F, self.B = args
@@ -98,8 +96,9 @@ class stuff(object):
         grad = np.zeros_like(self.F)
         for p in range(self.N):
          Kp = sampler.imatrix(self.data[p,:],self.H)
-         residualp = self.data[p] - self.F[p]*np.dot(self.X,Kp)
-         gradp = -1.*np.dot(self.X,Kp)
+         nmodelp = np.dot(self.X,Kp)
+         residualp = self.data[p] - self.F[p]*nmodelp -self.B[p]
+         gradp = -1.*nmodelp
          grad[p] = np.sum(residualp*gradp)
         return grad
       
