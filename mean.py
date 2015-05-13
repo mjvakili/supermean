@@ -183,10 +183,6 @@ class stuff(object):
         chi.append(self.nll())
         for i in range(max_iter):
 
-            np.savetxt("wfc_mean_10%d.txt"%(i)       , self.X ,fmt='%.12f')
-            np.savetxt("wfc_flux_10%d.txt"%(i)       , self.F ,fmt='%.12f')
-            np.savetxt("wfc_background_10%d.txt"%(i) , self.B ,fmt='%.12f')
-
             oldobj = self.nll()
             self.bfgs_F()
             obj = self.nll()
@@ -198,8 +194,8 @@ class stuff(object):
             self.bfgs_X()
             obj = self.nll()
             assert (obj < oldobj)or(obj == oldobj)
-            print "delta NLL after G STEP" , obj - oldobj
-            print "NLL after G-step", obj
+            print "delta NLL after X STEP" , obj - oldobj
+            print "NLL after X-step", obj
 
             oldobj = self.nll()
             self.bfgs_B()
@@ -210,6 +206,9 @@ class stuff(object):
             
             chi.append(obj)
             
+            np.savetxt("wfc_mean_10%d.txt"%(i)       , self.X ,fmt='%.12f')
+            np.savetxt("wfc_flux_10%d.txt"%(i)       , self.F ,fmt='%.12f')
+            np.savetxt("wfc_background_10%d.txt"%(i) , self.B ,fmt='%.12f')
 
             if np.mod(i, check_iter) == 0:
                 new_nll =  new_nll = self.nll()
