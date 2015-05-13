@@ -76,10 +76,16 @@ class stuff(object):
         self.X = self.X.flatten()
         
      def grad_X(self , params , *args):
-        
+        b  = int((self.D)**.5)
+        Z = self.X.reshape((self.H*b, self.H*b))
+        c=np.zeros_like(Z)
+        c[:,:-1] += Z[:, 1:]
+        c[:, 1:] += Z[:,:-1]
+        c[1:, :] += Z[:-1,:]
+        c[:-1,:] += Z[1:, :]
+        grad = 2.*self.epsilon*(4.*Z - c).flatten() 
         self.F, self.B = args
         self.X = params
-        grad = np.zeros_like(self.X)
         for p in range(self.N):
          Kp = sampler.imatrix(self.data[p,:],self.H)
          residualp = self.data[p] - self.F[p]*np.dot(self.X,Kp) - self.B[p]
