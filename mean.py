@@ -72,7 +72,10 @@ class stuff(object):
         
         m = int((self.D)**.5)*self.H
         self.X = self.X.reshape(m,m)
-        self.X[2:-2,2:-2]*=0
+        self.X[0:3,:]*=0
+        self.X[-3:,:]*=0
+        self.X[:,0:3]*=0
+        self.X[:,-3:]*=0
         self.X = self.X.flatten()
         
      def grad_X(self , params , *args):
