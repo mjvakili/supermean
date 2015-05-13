@@ -157,7 +157,9 @@ class stuff(object):
  
      def nll(self):
    
-       nll = 0.
+       b  = int((self.D)**.5)
+       Z = self.X.reshape((self.H*b, self.H*b))
+       nll = self.epsilon*((Z[:,1:]-Z[:,:-1])**2.).sum() + self.epsilon*((Z[1:,:]-Z[:-1,:])**2.).sum()
 
        for i in range(self.N):
          Ki = sampler.imatrix(self.data[i,:],self.H)
