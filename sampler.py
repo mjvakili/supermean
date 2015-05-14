@@ -13,7 +13,7 @@ def phi(dx , H , M):
   Prameters:
   dx = subpixel offset along the x-axis at the native pixel resolution,
   H  = upsampling factor.
-  M  = dimension along individual axes.  
+  M  = (dimension of data)**.5 
   """
 
   a , b = 0. ,  1.
@@ -33,18 +33,16 @@ def imatrix(data,H):
   center = c3.find_centroid(data)
   dx  , dy = center[0] , center[1]
   chi = np.dot(np.linalg.inv(ms.B(H*M)) , ms.I(H*M))
-  hx = np.dot(phi(-dx, H , M) , chi.T)
-  hy = np.dot(chi , phi(-dy, H , M).T)
+  hx = np.dot(phi(-dx, H , M) , chi)
+  hy = np.dot(chi.T , phi(-dy, H , M).T)
   hf = np.kron(hx.T, hy)
   return hf
 
-def imatrix_new(M,H,dx,dy):
+def test_imatrix_new(M,H,dx,dy):
   
   chi = np.dot(np.linalg.inv(ms.B(H*M)) , ms.I(H*M))
   hx = np.dot(phi(-dx, H , M) , chi)
-  print hx.shape
   hy = np.dot(chi.T , phi(-dy, H , M).T)
-  print hy.shape
   hf = np.kron(hx.T, hy)
   
   return hx, hy, hf
