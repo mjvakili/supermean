@@ -41,7 +41,12 @@ def B(n):
   for i in range(1,n+1):
     b[i , i-1:i-1+3] = np.array([1,4,1])
 
-  return b[1:-1,1:-1]
+  return b
+
+def I(n):
+   b = np.zeros((n+2,n))
+   b[1:-1] = np.eye(n)
+   return b
 
 def phi(x, n):
 
@@ -58,4 +63,4 @@ def phi(x, n):
     #print i
     #print matrix[i, i-2:i-2+5]
     matrix[i, i-2:i-2+5] = np.array([p1,p2,p3,p4,p5])
-  return matrix[1:-1,1:-1]
+  return matrix#s[1:-1,1:-1]eme
