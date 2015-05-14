@@ -6,7 +6,7 @@ from matplotlib.colors import LogNorm
 M , H = 25 , 3
 y = profile.makeGaussian(H*M, H*M/6. ,0.1, (H*M/2.+0.83*H, H*M/2.+1.45*H))
 
-hx, hy, hf = sampler.imatrix_new(M, H, -1.45, -0.83)
+hx, hy, hf = sampler.test_imatrix_new(M, H, -1.45, -0.83)
 qw = hx.dot(y).dot(hy)
 qq = y.flatten().dot(hf).reshape(M,M)
 
