@@ -18,9 +18,9 @@ def phi(dx , H , M):
 
   a , b = 0. ,  1.
   h1 = (b-a)/(H*M-1)
-  h2 = (b-a)*H/(H*M-1)
-  k = np.arange(0, H*M+2)
-  x = np.arange(M)*h2+(dx)*h2 
+  h2 = (b-a)/(M-1)
+  k = np.arange(1, H*M+3)
+  x = np.arange(M)*h2+dx*h2
   k = k[None,:]
   x = x[:,None]
   y = (x - a)/h1 - k + 2 
@@ -41,11 +41,11 @@ def imatrix(data,H):
 def imatrix_new(M,H,dx,dy):
   
   chi = np.dot(np.linalg.inv(ms.B(H*M)) , ms.I(H*M))
-  hx = np.dot(phi(-dx, H , M), chi)
+  hx = np.dot(phi(-dx, H , M) , chi)
   print hx.shape
   hy = np.dot(chi.T , phi(-dy, H , M).T)
   print hy.shape
   hf = np.kron(hx.T, hy)
   
-  return hf
+  return hx, hy, hf
   
