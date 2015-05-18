@@ -38,6 +38,16 @@ def imatrix(data,H):
   hf = np.kron(hx.T, hy)
   return hf
 
+def imatrix_new(M,H,dx,dy):
+  
+  chi = np.dot(np.linalg.inv(ms.B(H*M)) , ms.I(H*M))
+  hx = np.dot(phi(-dx, H , M) , chi)
+  hy = np.dot(chi.T , phi(-dy, H , M).T)
+  hf = np.kron(hx.T, hy)
+  
+  return hf
+  
+
 def test_imatrix_new(M,H,dx,dy):
   
   chi = np.dot(np.linalg.inv(ms.B(H*M)) , ms.I(H*M))
