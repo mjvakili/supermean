@@ -8,7 +8,7 @@ from scipy import ndimage
 
 class stuff(object):
    
-     def __init__(self, data,  H = 3, min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
+     def __init__(self, data,  mask, H = 3, epsilon = .01 , min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
 
         """ inputs of the code: NxD data matrix and NxD uncertainty matrix;
             N = the number of stars
@@ -17,10 +17,12 @@ class stuff(object):
 
         self.N = data.shape[0]           #number of observations
         self.D = data.shape[1]           #input dimensionality, dimension of each observed data point
-        self.H = H                       #upsampling factor          
+        self.H = H                       #upsampling factor
+        self.epsilon = epsilon           #smoothness parameter                                  
         self.data = np.atleast_2d(data)  #making sure the data has the right dimension
-        #self.ivar = ivar                 #variance with the same dimensiona as the data
-        
+        self.mask = mask                #variance with the same dimensiona as the data
+        f = .01
+        g = .05
         """ outputs of the code:
                                  H*H*D-dimensional mean vector:  X
                                  N-dimensional flux vector:      F
@@ -58,27 +60,36 @@ class stuff(object):
                           
           self.B[i]   =  np.array([self.d2d[i,m/2-4:m/2+5,-1:].mean(),self.d2d[i,m/2-4:m/2+5,:1].mean(),self.d2d[i,:1,m/2-4:m/2+5].mean(),self.d2d[i,-1:,m/2-4:m/2+5].mean()]).mean()
           
+          #print self.B[i] , self.d2d[i].min()
           self.dm[i]  =  self.data[i]-self.B[i]
           self.F[i]   =  np.sum(self.dm[i])
           self.dm[i] /=  self.F[i]                    
 
-          
+          #plt.imshow(self.dm[i].reshape(25,25), interpolation="None",norm = LogNorm())
+          #plt.colorbar()
+          #plt.show()
           obs = ndimage.interpolation.zoom(self.dm[i].reshape(25,25), self.H, output = None, order=3, mode='constant', cval=0.0, prefilter=True).flatten()
           
           self.X  =  self.X + shifter.shifter(obs)   
-         
+          #plt.imshow(shifter.shifter(obs).reshape(75,75), interpolation="None",norm = LogNorm())
+          #plt.colorbar()
+          #plt.show()
         self.X /= self.N                           #take the mean of the upsampled normalized shifted ff-subtracted stars
         #self.X[(self.X < 0)] = np.mean(self.X)       #replace negative mean brightnesses with mean pixel-brightness of the initial X  
-        
+        #plt.imshow(self.X.reshape(75,75), interpolation="None" , norm = LogNorm())
+        #plt.colorbar()
+        #plt.show()
         m = int((self.D)**.5)*self.H
         self.X = self.X.reshape(m,m)
-        self.X[0:3,:]*=0
-        self.X[-3:,:]*=0
-        self.X[:,0:3]*=0
-        self.X[:,-3:]*=0
+        self.X[self.X<0]=np.median(self.X)
+        #self.X[0:1,:]*=0
+        #self.X[-1:,:]*=0
+        #self.X[:,0:1]*=0
+        #self.X[:,-1:]*=0
         self.X = self.X.flatten()
         
      def grad_X(self , params , *args):
+
         b  = int((self.D)**.5)
         Z = self.X.reshape((self.H*b, self.H*b))
         c=np.zeros_like(Z)
@@ -89,13 +100,16 @@ class stuff(object):
         grad = 2.*self.epsilon*(4.*Z - c).flatten() 
         self.F, self.B = args
         self.X = params
+        #grad = np.zeros_like(self.X)
         for p in range(self.N):
          Kp = sampler.imatrix(self.data[p,:],self.H)
-         residualp = self.data[p] - self.F[p]*np.dot(self.X,Kp) - self.B[p]
-         gradp = -1.*self.F[p]*Kp
+         modelp = self.F[p]*np.dot(self.X,Kp) - self.B[p]
+         residualp = self.data[p] - modelp
+         varp = f + g*modelp
+         gradp = -1.*self.F[p]*Kp 
          gradp = gradp*residualp[None,:]
          Gradp = gradp.sum(axis = 1) 
-         grad += Gradp
+         grad += Gradp/varp + (g/2.)*np.sum(varp**-1. - residualp**2./varp**2.)*self.F[p]*Kp
         return grad
      
      def grad_F(self, params, *args):
@@ -104,11 +118,12 @@ class stuff(object):
         self.F = params
         grad = np.zeros_like(self.F)
         for p in range(self.N):
-         Kp = sampler.imatrix(self.data[p,:],self.H)
+         Kp = sampler.imatrix(self.data[p,:], self.H)
          nmodelp = np.dot(self.X,Kp)
          residualp = self.data[p] - self.F[p]*nmodelp -self.B[p]
+         varp = f + g*(self.F[p]*nmodelp + self.B[p])
          gradp = -1.*nmodelp
-         grad[p] = np.sum(residualp*gradp)
+         grad[p] = np.sum(residualp*gradp/varp) +(g/2.)*np.sum(nmodelp/varp) - (g/2.)*np.sum(nmodelp*residualp**2./varp**2.)
         return grad
       
      def grad_B(self, params, *args):
@@ -118,8 +133,10 @@ class stuff(object):
         grad = np.zeros_like(self.B)
         for p in range(self.N):
          Kp = sampler.imatrix(self.data[p,:],self.H)
-         residualp = self.data[p] - self.F[p]*np.dot(self.X,Kp) - self.B[p]
-         grad[p] = -1.*np.sum(residualp)        
+         modelp = self.F[p]*np.dot(self.X,Kp) + self.B[p]
+         varp = f+g*modelp
+         residualp = self.data[p] - modelp
+         grad[p] = -1.*np.sum(residualp/varp) - (g/2.)*np.sum(residualp**2./varp**2.) + (g/2.)*np.sum(varp**-1.)        
         return grad
      
 
@@ -142,37 +159,37 @@ class stuff(object):
 
      def bfgs_X(self):
         x = op.fmin_l_bfgs_b(self.func_X,x0=self.X, fprime = self.grad_X,args=(self.F, self.B), approx_grad = False, \
-                              bounds = None, m=10, factr=100., pgtol=1e-05, epsilon=1e-04, maxfun=50)
+                              bounds = None, m=10, factr=100., pgtol=1e-05, epsilon=1e-04, maxfun=20)
         print x
         self.X  = x[0]
 
      def bfgs_F(self):
         x = op.fmin_l_bfgs_b(self.func_F,x0=self.F, fprime = self.grad_F,args=(self.X, self.B), approx_grad = False, \
-                              bounds = None, m=10, factr=100., pgtol=1e-05, epsilon=1e-04, maxfun=50)
+                              bounds = None, m=10, factr=100., pgtol=1e-05, epsilon=1e-04, maxfun=40)
         print x
         self.F  = x[0]
 
      def bfgs_B(self):
         x = op.fmin_l_bfgs_b(self.func_B,x0=self.B, fprime = self.grad_B,args=(self.X, self.F), approx_grad = False, \
-                              bounds = None, m=10, factr=100., pgtol=1e-05, epsilon=1e-04, maxfun=50)
+                              bounds = None, m=10, factr=100., pgtol=1e-05, epsilon=1e-04, maxfun=20)
         print x
         self.B  = x[0]
  
      def nll(self):
    
+       
        b  = int((self.D)**.5)
        Z = self.X.reshape((self.H*b, self.H*b))
-       nll = self.epsilon*((Z[:,1:]-Z[:,:-1])**2.).sum() + self.epsilon*((Z[1:,:]-Z[:-1,:])**2.).sum()
-
+       nll = self.epsilon*((Z[:,1:]-Z[:,:-1])**2.).sum() + self.epsilon*((Z[1:,:]-Z[:-1,:])**2.).sum() 
        for i in range(self.N):
          Ki = sampler.imatrix(self.data[i,:],self.H)
          #print np.dot(self.A[i,:],self.G).shape
          #print Ki.shape
          model_i = self.F[i]*np.dot(self.X, Ki) + self.B[i]
-         b  = int((self.D)**.5)
-         model_square = model_i.reshape(b,b)
-         data_square = self.data[i,:].reshape(b,b)
-         nll += 0.5*np.sum((model_square - data_square)**2.)
+         model_square = model_i.reshape(b,b)#[2:-2,2:-2]
+         data_square = self.data[i,:].reshape(b,b)#[2:-2,2:-2]
+         var_i = f + g*model_i
+         nll += 0.5*np.sum(((model_square - data_square)**2.)/var_i) + .5*np.log(var_i)
        return nll
      
      def update(self, max_iter, check_iter, min_iter, tol):
@@ -183,32 +200,34 @@ class stuff(object):
         chi.append(self.nll())
         for i in range(max_iter):
 
-            oldobj = self.nll()
+
+
+            #oldobj = self.nll()
             self.bfgs_F()
-            obj = self.nll()
-            print "delta NLL after f STEP" , obj - oldobj
-            assert (obj < oldobj)or(obj == oldobj)
-            print "NLL after F-step", obj
+            #obj = self.nll()
+            #print "delta NLL after f STEP" , obj - oldobj
+            #assert (obj < oldobj)or(obj == oldobj)
+            #print "NLL after F-step", obj
             
-            oldobj = self.nll()
+            #oldobj = self.nll()
             self.bfgs_X()
-            obj = self.nll()
-            assert (obj < oldobj)or(obj == oldobj)
-            print "delta NLL after X STEP" , obj - oldobj
-            print "NLL after X-step", obj
+            #obj = self.nll()
+            #assert (obj < oldobj)or(obj == oldobj)
+            #print "delta NLL after G STEP" , obj - oldobj
+            #print "NLL after G-step", obj
 
             oldobj = self.nll()
             self.bfgs_B()
             obj = self.nll()
-            assert (obj < oldobj)or(obj == oldobj)
-            print "delta NLL after B STEP" , obj - oldobj
-            print "NLL after B-step", obj
-            
-            chi.append(obj)
+            #assert (obj < oldobj)or(obj == oldobj)
+            #print "delta NLL after B STEP" , obj - oldobj
+            #print "NLL after B-step", obj
             
             np.savetxt("wfc_mean_10%d.txt"%(i)       , self.X ,fmt='%.12f')
             np.savetxt("wfc_flux_10%d.txt"%(i)       , self.F ,fmt='%.12f')
             np.savetxt("wfc_background_10%d.txt"%(i) , self.B ,fmt='%.12f')
+            chi.append(obj)
+                        
 
             if np.mod(i, check_iter) == 0:
                 new_nll =  new_nll = self.nll()
