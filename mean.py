@@ -5,7 +5,8 @@ import sampler
 import numpy as np
 import scipy.optimize as op
 from scipy import ndimage
-
+f = .01
+g = .05
 class stuff(object):
    
      def __init__(self, data,  mask, H = 3, epsilon = .01 , min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
@@ -21,8 +22,8 @@ class stuff(object):
         self.epsilon = epsilon           #smoothness parameter                                  
         self.data = np.atleast_2d(data)  #making sure the data has the right dimension
         self.mask = mask                #variance with the same dimensiona as the data
-        self.f = .01
-        self.g = .05
+        f = .01
+        g = .05
         """ outputs of the code:
                                  H*H*D-dimensional mean vector:  X
                                  N-dimensional flux vector:      F
@@ -105,11 +106,11 @@ class stuff(object):
          Kp = sampler.imatrix(self.data[p,:],self.H)
          modelp = self.F[p]*np.dot(self.X,Kp) - self.B[p]
          residualp = self.data[p] - modelp
-         varp = self.f + self.g*modelp
+         varp = f + g*modelp
          gradp = -1.*self.F[p]*Kp 
-         gradp = gradp*residualp[None,:]
+         gradp = gradp*(residualp/varp - (g/2.)*(varp**-1. - residualp**2./varp**2.))[None,:]
          Gradp = gradp.sum(axis = 1) 
-         grad += Gradp/varp + (self.g/2.)*np.sum(varp**-1. - residualp**2./varp**2.)*self.F[p]*Kp
+         grad += Gradp
         return grad
      
      def grad_F(self, params, *args):
@@ -121,9 +122,9 @@ class stuff(object):
          Kp = sampler.imatrix(self.data[p,:], self.H)
          nmodelp = np.dot(self.X,Kp)
          residualp = self.data[p] - self.F[p]*nmodelp -self.B[p]
-         varp = self.f + self.g*(self.F[p]*nmodelp + self.B[p])
+         varp = f + g*(self.F[p]*nmodelp + self.B[p])
          gradp = -1.*nmodelp
-         grad[p] = np.sum(residualp*gradp/varp) +(self.g/2.)*np.sum(nmodelp/varp) - (self.g/2.)*np.sum(nmodelp*residualp**2./varp**2.)
+         grad[p] = np.sum(residualp*gradp/varp) +(g/2.)*np.sum(nmodelp/varp) - (g/2.)*np.sum(nmodelp*residualp**2./varp**2.)
         return grad
       
      def grad_B(self, params, *args):
@@ -134,9 +135,9 @@ class stuff(object):
         for p in range(self.N):
          Kp = sampler.imatrix(self.data[p,:],self.H)
          modelp = self.F[p]*np.dot(self.X,Kp) + self.B[p]
-         varp = self.f+self.g*modelp
+         varp = f+g*modelp
          residualp = self.data[p] - modelp
-         grad[p] = -1.*np.sum(residualp/varp) - (self.g/2.)*np.sum(residualp**2./varp**2.) + (self.g/2.)*np.sum(varp**-1.)        
+         grad[p] = -1.*np.sum(residualp/varp) - (g/2.)*np.sum(residualp**2./varp**2.) + (g/2.)*np.sum(varp**-1.)        
         return grad
      
 
@@ -186,10 +187,10 @@ class stuff(object):
          #print np.dot(self.A[i,:],self.G).shape
          #print Ki.shape
          model_i = self.F[i]*np.dot(self.X, Ki) + self.B[i]
-         model_square = model_i#.reshape(b,b)[2:-2,2:-2]
+         model_square = model_i#.reshape(b,b)#[2:-2,2:-2]
          data_square = self.data[i,:]#.reshape(b,b)#[2:-2,2:-2]
-         var_i = self.f + self.g*model_i
-         nll += 0.5*np.sum(((model_square - data_square)**2.)/var_i) + .5*np.log(var_i)
+         var_i = f + g*model_i
+         nll += 0.5*np.sum(((model_square - data_square)**2.)/var_i) + .5*np.sum(np.log(var_i+self.epsilon))
        return nll
      
      def update(self, max_iter, check_iter, min_iter, tol):
