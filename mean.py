@@ -9,7 +9,7 @@ f = .01
 g = .05
 class stuff(object):
    
-     def __init__(self, data,  mask, H = 3, epsilon = .01 , min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
+     def __init__(self, data, cx, cy, mask, H = 3, epsilon = .01 , min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
 
         """ inputs of the code: NxD data matrix and NxD uncertainty matrix;
             N = the number of stars
@@ -21,20 +21,22 @@ class stuff(object):
         self.H = H                       #upsampling factor
         self.epsilon = epsilon           #smoothness parameter                                  
         self.data = np.atleast_2d(data)  #making sure the data has the right dimension
-        self.mask = mask                #variance with the same dimensiona as the data
-        f = .01
-        g = .05
+        self.mask = mask                 #data quality
+        self.dx = cx                     #list of centroid offsets x
+        self.dy = cy                     #list of centroid offsets y   
+        f = .01                          #floor variance or sigma^2
+        g = .05                          #gain in the noise model
+        self.M = int(self.D**.5)
         """ outputs of the code:
                                  H*H*D-dimensional mean vector:  X
                                  N-dimensional flux vector:      F
-                                 1-dimensional flat-field background: B
+                                 N-dimensional flat-field background: B
         """
                
         self.X = np.zeros((self.D*self.H*self.H))   #Creating the mean matrix which is a H^2*D-dimensional object!
         self.F = np.zeros((self.N))                 #Creating an N-dimensional Flux vector.
-
-        #self.B = 0.0                                #Creating an 1-dimensional background vector.
         self.B = np.zeros((self.N))                 #one flat-field per star 
+
         """ initialization of X, F, B by means of subtracting the median!(to initialize the background B),
                                                   normalizing (to intialize the flux F),
                                                   shifting, and upsampling (to initialize the mean X)"""
@@ -50,9 +52,6 @@ class stuff(object):
         initializing the parameters
         """         
         
-        
-        #self.dm = self.data - self.B
-        #self.F  = np.sum(self.dm, axis = 1)
         m = int((self.D)**.5)
         self.d2d = self.data.reshape(self.N , m , m)
         self.dm = np.zeros((self.N, self.D))
@@ -61,28 +60,20 @@ class stuff(object):
                           
           self.B[i]   =  np.array([self.d2d[i,m/2-4:m/2+5,-1:].mean(),self.d2d[i,m/2-4:m/2+5,:1].mean(),self.d2d[i,:1,m/2-4:m/2+5].mean(),self.d2d[i,-1:,m/2-4:m/2+5].mean()]).mean()
           
-          #print self.B[i] , self.d2d[i].min()
           self.dm[i]  =  self.data[i]-self.B[i]
           self.F[i]   =  np.sum(self.dm[i])
           self.dm[i] /=  self.F[i]                    
 
-          #plt.imshow(self.dm[i].reshape(25,25), interpolation="None",norm = LogNorm())
-          #plt.colorbar()
-          #plt.show()
           obs = ndimage.interpolation.zoom(self.dm[i].reshape(25,25), self.H, output = None, order=3, mode='constant', cval=0.0, prefilter=True).flatten()
+          shifted_sr = shifter.shifter(obs)
+          shifted_sr[shifted_sr<0] = np.mean(shifted_sr)
+          self.X += shifted_sr.flatten()   
           
-          self.X  =  self.X + shifter.shifter(obs)   
-          #plt.imshow(shifter.shifter(obs).reshape(75,75), interpolation="None",norm = LogNorm())
-          #plt.colorbar()
-          #plt.show()
-        self.X /= self.N                           #take the mean of the upsampled normalized shifted ff-subtracted stars
-        #self.X[(self.X < 0)] = np.mean(self.X)       #replace negative mean brightnesses with mean pixel-brightness of the initial X  
-        #plt.imshow(self.X.reshape(75,75), interpolation="None" , norm = LogNorm())
-        #plt.colorbar()
-        #plt.show()
+        self.X /= self.N
+        self.X += 1e-6                           
         m = int((self.D)**.5)*self.H
-        self.X = self.X.reshape(m,m)
-        self.X[self.X<0]=np.median(self.X)
+        #self.X = self.X.reshape(m,m)
+        #self.X[self.X<0]=1.#np.mean(self.X)
         #self.X[0:1,:]*=0
         #self.X[-1:,:]*=0
         #self.X[:,0:1]*=0
@@ -103,12 +94,17 @@ class stuff(object):
         self.X = params
         #grad = np.zeros_like(self.X)
         for p in range(self.N):
-         Kp = sampler.imatrix(self.data[p,:],self.H)
-         modelp = self.F[p]*np.dot(self.X,Kp) - self.B[p]
+         Kp = sampler.imatrix_new(self.M, self.H, self.dx[p], self.dy[p])
+         modelp = self.F[p]*np.dot(self.X,Kp) + self.B[p]
          residualp = self.data[p] - modelp
-         varp = f + g*modelp
-         gradp = -1.*self.F[p]*Kp 
-         gradp = gradp*(residualp/varp - (g/2.)*(varp**-1. - residualp**2./varp**2.))[None,:]
+         varp = f + g*np.abs(modelp)
+         gradp = -1.*self.F[p]*Kp
+         
+         gainp = (g/2.)*(varp**-1. - residualp**2./varp**2.)
+
+         gainp[modelp<0] *= -1.   #var=f+g|model| to account for numerical artifacts when sr model is sampled at the data grid
+
+         gradp = gradp*(residualp/varp - gainp)[None,:]
          Gradp = gradp.sum(axis = 1) 
          grad += Gradp
         return grad
@@ -119,12 +115,15 @@ class stuff(object):
         self.F = params
         grad = np.zeros_like(self.F)
         for p in range(self.N):
-         Kp = sampler.imatrix(self.data[p,:], self.H)
+         Kp = sampler.imatrix_new(self.M, self.H, self.dx[p], self.dy[p])
          nmodelp = np.dot(self.X,Kp)
-         residualp = self.data[p] - self.F[p]*nmodelp -self.B[p]
-         varp = f + g*(self.F[p]*nmodelp + self.B[p])
+         modelp = self.F[p]*nmodelp + self.B[p]
+         residualp = self.data[p] - modelp
+         varp = f + g*np.abs(modelp)
          gradp = -1.*nmodelp
-         grad[p] = np.sum(residualp*gradp/varp) +(g/2.)*np.sum(nmodelp/varp) - (g/2.)*np.sum(nmodelp*residualp**2./varp**2.)
+         gainp = (g/2.)*(nmodelp/varp) - (g/2.)*(nmodelp*residualp**2./varp**2.)
+         gainp[modelp<0] *= -1.   #var=f+g|model| to account for numerical artifacts when sr model is sampled at the data grid
+         grad[p] = np.sum(residualp*gradp/varp) + np.sum(gainp)
         return grad
       
      def grad_B(self, params, *args):
@@ -133,11 +132,13 @@ class stuff(object):
         self.B = params
         grad = np.zeros_like(self.B)
         for p in range(self.N):
-         Kp = sampler.imatrix(self.data[p,:],self.H)
+         Kp = sampler.imatrix_new(self.M, self.H, self.dx[p], self.dy[p])
          modelp = self.F[p]*np.dot(self.X,Kp) + self.B[p]
-         varp = f+g*modelp
+         varp = f+g*np.abs(modelp)
          residualp = self.data[p] - modelp
-         grad[p] = -1.*np.sum(residualp/varp) - (g/2.)*np.sum(residualp**2./varp**2.) + (g/2.)*np.sum(varp**-1.)        
+         gainp = - (g/2.)*(residualp**2./varp**2.) + (g/2.)*(varp**-1.)
+         gainp[modelp<0] *= -1.   #var=f+g|model| to account for numerical artifacts when sr model is sampled at the data grid   
+         grad[p] = -1.*np.sum(residualp/varp) + np.sum(gainp)      
         return grad
      
 
@@ -177,24 +178,27 @@ class stuff(object):
         self.B  = x[0]
  
      def nll(self):
-   
+       import matplotlib.pyplot as plt
        
        b  = int((self.D)**.5)
        Z = self.X.reshape((self.H*b, self.H*b))
        nll = self.epsilon*((Z[:,1:]-Z[:,:-1])**2.).sum() + self.epsilon*((Z[1:,:]-Z[:-1,:])**2.).sum() 
        for i in range(self.N):
-         Ki = sampler.imatrix(self.data[i,:],self.H)
-         #print np.dot(self.A[i,:],self.G).shape
-         #print Ki.shape
+         Ki = sampler.imatrix_new(self.M, self.H, self.dx[i], self.dy[i])
          model_i = self.F[i]*np.dot(self.X, Ki) + self.B[i]
-         model_square = model_i#.reshape(b,b)#[2:-2,2:-2]
-         data_square = self.data[i,:]#.reshape(b,b)#[2:-2,2:-2]
-         var_i = f + g*model_i
-         nll += 0.5*np.sum(((model_square - data_square)**2.)/var_i) + .5*np.sum(np.log(var_i+self.epsilon))
+         model_square = model_i
+         data_square = self.data[i,:]
+         var_i = f + g*np.abs(model_i)
+         
+         nll += 0.5*np.sum(((model_square - data_square)**2.)/var_i) + .5*np.sum(np.log(var_i))
        return nll
      
      def update(self, max_iter, check_iter, min_iter, tol):
-  
+      
+        np.savetxt("wfc_mean_iter_0.txt"       , self.X ,fmt='%.12f')
+        np.savetxt("wfc_flux_iter_0.txt"       , self.F ,fmt='%.12f')
+        np.savetxt("wfc_background_iter_0.txt" , self.B ,fmt='%.12f')
+
         print 'Starting NLL =', self.nll()
         nll = self.nll()
         chi = []
@@ -203,30 +207,19 @@ class stuff(object):
 
 
 
-            #oldobj = self.nll()
             self.bfgs_F()
-            #obj = self.nll()
-            #print "delta NLL after f STEP" , obj - oldobj
-            #assert (obj < oldobj)or(obj == oldobj)
-            #print "NLL after F-step", obj
-            
-            #oldobj = self.nll()
+            obj = self.nll()
+            print "NLL after F-step", obj
             self.bfgs_X()
-            #obj = self.nll()
-            #assert (obj < oldobj)or(obj == oldobj)
-            #print "delta NLL after G STEP" , obj - oldobj
-            #print "NLL after G-step", obj
-
-            oldobj = self.nll()
+            obj = self.nll()
+            print "NLL after X-step", obj
             self.bfgs_B()
             obj = self.nll()
-            #assert (obj < oldobj)or(obj == oldobj)
-            #print "delta NLL after B STEP" , obj - oldobj
-            #print "NLL after B-step", obj
+            print "NLL after B-step", obj
             
-            np.savetxt("wfc_mean_10%d.txt"%(i)       , self.X ,fmt='%.12f')
-            np.savetxt("wfc_flux_10%d.txt"%(i)       , self.F ,fmt='%.12f')
-            np.savetxt("wfc_background_10%d.txt"%(i) , self.B ,fmt='%.12f')
+            np.savetxt("wfc_mean_iter_%d.txt"%(i+1)       , self.X ,fmt='%.12f')
+            np.savetxt("wfc_flux_iter_%d.txt"%(i+1)       , self.F ,fmt='%.12f')
+            np.savetxt("wfc_background_iter_%d.txt"%(i+1) , self.B ,fmt='%.12f')
             chi.append(obj)
                         
 
