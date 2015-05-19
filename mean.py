@@ -5,8 +5,8 @@ import sampler
 import numpy as np
 import scipy.optimize as op
 from scipy import ndimage
-f = .01
-g = .05
+f = .05
+g = .01
 class stuff(object):
    
      def __init__(self, data, cx, cy, mask, H = 3, epsilon = .01 , min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
@@ -24,8 +24,6 @@ class stuff(object):
         self.mask = mask                 #data quality
         self.dx = cx                     #list of centroid offsets x
         self.dy = cy                     #list of centroid offsets y   
-        f = .01                          #floor variance or sigma^2
-        g = .05                          #gain in the noise model
         self.M = int(self.D**.5)
         """ outputs of the code:
                                  H*H*D-dimensional mean vector:  X
