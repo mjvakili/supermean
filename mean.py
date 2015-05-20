@@ -7,7 +7,7 @@ import scipy.optimize as op
 from scipy import ndimage
 f  = .05
 g  = .01
-fl = 1e-4
+fl = 1e-6
 
 class stuff(object):
    
