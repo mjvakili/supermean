@@ -47,11 +47,6 @@ class stuff(object):
         
         
      def initialize(self):
-
-        """
-        initializing the parameters
-        """         
-        
         m = int((self.D)**.5)
         self.d2d = self.data.reshape(self.N , m , m)
         self.dm = np.zeros((self.N, self.D))
@@ -59,26 +54,18 @@ class stuff(object):
         for i in range(self.N):
                           
           self.B[i]   =  np.array([self.d2d[i,m/2-4:m/2+5,-1:].mean(),self.d2d[i,m/2-4:m/2+5,:1].mean(),self.d2d[i,:1,m/2-4:m/2+5].mean(),self.d2d[i,-1:,m/2-4:m/2+5].mean()]).mean()
-          
+             
           self.dm[i]  =  self.data[i]-self.B[i]
+          self.dm    -= self.dm.min()
           self.F[i]   =  np.sum(self.dm[i])
           self.dm[i] /=  self.F[i]                    
-
-          obs = ndimage.interpolation.zoom(self.dm[i].reshape(25,25), self.H, output = None, order=3, mode='constant', cval=0.0, prefilter=True).flatten()
-          shifted_sr = shifter.shifter(obs)
-          shifted_sr[shifted_sr<0] = np.median(shifted_sr)
-          X += shifted_sr.flatten()   
+          shifted = shifter.shifter(self.dm[i], self.dx[i], self.dy[i])
+          obs = ndimage.interpolation.zoom(shifted.reshape(25,25), self.H, output = None, order=3, mode='constant', cval=0.0, prefilter=True).flatten()
+          
+          
+          X += obs.flatten()   
           
         X /= self.N
-        X[X<0] = fl                #setting the initial negative pixels in X to fl                           
-        m = int((self.D)**.5)*self.H
-        #self.X = self.X.reshape(m,m)
-        #self.X[self.X<0]=1.#np.mean(self.X)
-        #self.X[0:1,:]*=0
-        #self.X[-1:,:]*=0
-        #self.X[:,0:1]*=0
-        #self.X[:,-1:]*=0
-        X = X.flatten()
         self.lnX = np.log(X)
         
      def grad_lnX(self , params , *args):
