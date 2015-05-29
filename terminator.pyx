@@ -3,7 +3,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 from cython.parallel import prange
-
+#from libc.math cimport log
 
 
 DTYPE = np.double
@@ -39,26 +39,31 @@ cdef double _njj(np.ndarray[DTYPE_t, ndim=2, mode="c"] data,
         double f, 
         double g,
         double fl,):
+        
     cdef np.ndarray[DTYPE_t, ndim=1, mode="c"] X = np.exp(lnX)
     cdef int N = data.shape[0]
     cdef int D = data.shape[1]
-    cdef np.ndarray[DTYPE_t, ndim=1, mode="c"] residual = np.empty(D, dtype=DTYPE)
-    cdef np.ndarray[DTYPE_t, ndim=1, mode="c"] model = np.empty(D, dtype=DTYPE)
-    cdef int i
-    cdef double obj = 0
-    cdef np.ndarray[DTYPE_t, ndim=1, mode="c"] var = np.empty(D, dtype=DTYPE)
-    cdef np.ndarray[DTYPE_t,  ndim=2, mode="c"] Ki = np.empty((D*H, D), dtype=DTYPE)
-
-    for i in prange(N, nogil=True):
-     with gil:
-       Ki = K[i]
-       model = F[i]*np.dot(X+fl, Ki) + B[i]
+    cdef DTYPE_t [:] model = np.empty(D, dtype=DTYPE)
+    cdef DTYPE_t [:] residual = np.empty(D, dtype=DTYPE)
+    cdef DTYPE_t [:] var = np.empty(D, dtype=DTYPE)
+    cdef DTYPE_t [:] chi = np.empty(D, dtype=DTYPE)
+    cdef DTYPE_t [:,:] Ki = np.empty((D*H, D), dtype=DTYPE)
+    cdef int i, v
+    cdef double obj = 0.0
+    for i in range(N):
        
-       residual = data[i] - model
+       Ki = K[i]
+       model[:] = F[i]*np.dot(X+fl, Ki) + B[i]
+       residual[:] = data[i] - model[:]
        var = f + g*np.abs(model)
       
-       residual[mask[i]!=0.0] = 0.0
-       obj += 0.5*np.sum(((residual)**2.)/var) + .5*np.sum(np.log(var))
+       
+       for v in range(D):
+         if (mask[i,v] != 0 ):
+           residual[v] = 0
+         chi[v] = residual[v]*residual[v]
+         chi[v] /= var[v]
+       obj += .5*np.sum(np.log(var)) + 0.5*np.sum(chi)
       
     return obj
 
@@ -81,7 +86,7 @@ def nll(np.ndarray[DTYPE_t, ndim=2, mode="c"] data,
     cdef np.ndarray[DTYPE_t, ndim=1, mode="c"] residual = np.empty(D, dtype=DTYPE)
     cdef np.ndarray[DTYPE_t, ndim=1, mode="c"] model = np.empty(D, dtype=DTYPE)
     cdef int i
-    cdef double objj = 0
+    cdef double objj = 0.0
     cdef np.ndarray[DTYPE_t, ndim=1, mode="c"] var = np.empty(D, dtype=DTYPE)
     cdef np.ndarray[DTYPE_t,  ndim=2, mode="c"] Ki = np.empty((D*H, D), dtype=DTYPE)
 
@@ -94,6 +99,6 @@ def nll(np.ndarray[DTYPE_t, ndim=2, mode="c"] data,
        var = f + g*np.abs(model)
       
        residual[mask[i]!=0.0] = 0.0
-       objj += 0.5*np.sum(((residual)**2.)/var) + .5*np.sum(np.log(var))
+       objj +=  0.5*np.sum(np.log(var))+ 0.5*np.sum(((residual)**2.)/var) +
       
     return objj
