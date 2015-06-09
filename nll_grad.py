@@ -45,8 +45,6 @@ def nll_grad_lnX(lnX, data, masks, F, B, K, fl, f, g, H):
          gradp = gradp[:,mask]
          gainp = (g/2.)*(varp**-1. - ep**2./varp**2.)
 
-         #gainp[modelp<0] *= -1.   #var=f+g|model| to account for numerical artifacts when sr model is sampled at the data grid
-	 
          gradp = X[:,None]*gradp*(ep/varp - gainp)[None,:]
          Gradp = gradp.sum(axis = 1) 
          grad += Gradp
