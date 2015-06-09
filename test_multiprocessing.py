@@ -14,7 +14,7 @@ fl = 1e-5
 
 F = h5py.File('sampler.h5','r') 
 K = F["MyDataset"]
-Nthreads = 1
+Nthreads = 10
 
 from multiprocessing import Pool
 #from interruptible_pool import InterruptiblePool
