@@ -8,16 +8,10 @@ import h5py
 import time
 from scipy.linalg import cho_factor, cho_solve
 
-f  = 0.05
-g  = 0.01
-fl = 1e-5
+K = h5py.File('sampler.hdf5','r')["sampler"] 
+Nthreads = 10  #number of threads
 
-F = h5py.File('sampler.h5','r') 
-K = F["MyDataset"]
-Nthreads = 10
-
-from multiprocessing import Pool
-#from interruptible_pool import InterruptiblePool
+from interruptible_pool import InterruptiblePool
 from nll_grad import nll_grad_lnX
 
 def fg(args):
@@ -42,7 +36,9 @@ def fit_single_patch(data, mask, psf, old_flux, old_back, floor, gain):
 
 class stuff(object):
    
-     def __init__(self, data, cx, cy, masks, H = 3, epsilon = .01 , min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
+     def __init__(self, data, cx, cy, masks,
+                        f = 5e-2, fl = 1e-5, H = 4, epsilon = 1e-2,
+                        min_iter=5, max_iter=10, check_iter=5 , tol=1.e-8):
 
         """ inputs of the code: NxD data matrix and NxD mask matrix;
             data contains images of stars, and mask contains questionable
@@ -51,7 +47,8 @@ class stuff(object):
             D = the number of pixels in each patch
             H = upsampling factor
             cx, cy = centroiding offsets
-                             
+            f = floor variance of the nosie
+            fl = floor of the PSF model                 
         """
 
         self.N = data.shape[0]             #number of observations
@@ -63,22 +60,27 @@ class stuff(object):
         self.dx = cx                       #list of centroid offsets x
         self.dy = cy                       #list of centroid offsets y   
         self.M = int(self.D**.5)
-         
+        self.f = f                         #floor variance of noise model
+        self.fl = fl			   #floor of the PSF model
+   
         """ outputs of the code:
                                  H*H*D-dimensional mean vector:  X
                                  N-dimensional flux vector:      F
                                  N-dimensional flat-field background: B
         """
                
-        
         self.F = np.zeros((self.N))                 #Creating an N-dimensional Flux vector.
         self.B = np.zeros((self.N))                 #one flat-field per star 
         self.lnX = np.ones((self.D*self.H*self.H))  #log(X)
- 
+        self.g  = 0.01                              #gain of the noise model
         """ initialization of X, F, B by means of subtracting the median!(to initialize the background B),
                                                   normalizing (to intialize the flux F),
                                                   shifting, and upsampling (to initialize the mean X)"""
         self.initialize()
+        
+        #""" recording parameters after each iteration """
+
+        self.write_pars_to_file(0)
 
         """ updating X, F, B by X-step, F-step, and B-step optimization"""
         self.update(max_iter, check_iter, min_iter, tol)
@@ -88,11 +90,11 @@ class stuff(object):
 
         """
         initializing the parameters
-        """         
+        """        
         self.masks[self.masks == 0] = -1
 	self.masks[self.masks > 0] = False
-	self.masks[self.masks  < 0] = True
-        self.masks = self.masks==True
+	self.masks[self.masks < 0] = True
+        self.masks = self.masks == True
         #print self.masks[0]
         m = int((self.D)**.5)
         self.d2d = self.data.reshape(self.N , m , m)
@@ -114,10 +116,31 @@ class stuff(object):
           obs = ndimage.interpolation.zoom(shifted.reshape(25,25), self.H,
                                            output = None, order=3, mode='constant', 
  					   cval=0.0, prefilter=True).flatten()
+          
           X += obs.flatten()   
           
         X /= self.N
+        X[X<0] = self.fl
+        X[X==0] = self.fl
         self.lnX = np.log(X)
+
+     def write_pars_to_file(self, step):
+
+       f = h5py.File("trial_iter_%d.h5"%(step), 'w')
+       grp = f.create_group('model_pars')     # create group
+       columns = ['F', 'B', 'lnX']
+       n_cols = len(columns)       # number of columns
+       col_fmt = []                # column format
+       for column in columns:
+          column_attr = getattr(self, column)
+          # write out file
+          grp.create_dataset(column, data=column_attr)
+	# save metadata
+       metadata = [ 'fl', 'f', 'g']
+       for metadatum in metadata:
+          grp.attrs[metadatum] = getattr(self, metadatum)
+
+       f.close()
 
      def update_FB(self):
 
@@ -150,35 +173,37 @@ class stuff(object):
          x = cho_solve(factor, np.dot(AT, Y/C))
          self.B[p], self.F[p] = x[0], x[1]         
          """
-     def func_lnX_grad_lnX_Nthreads(self, params, *args):
+      def func_lnX_grad_lnX_Nthreads(self, params):
 
         """
         Use multiprocessing to calculate negative-log-likelihood and gradinets.
         """
         n_samples = self.N
         self.lnX = params
-        self.data, self.masks, self.F, self.B, K, fl, f, g, self.H, Nthreads = args
+        #self.fl, self.f, self.g, self.H, Nthreads = args
 
-        #pool = InterruptiblePool(Nthreads)
-	pool = Pool(Nthreads)
-        mapfn = pool.map
+
+	Pool = InterruptiblePool(Nthreads)
+        mapfn = Pool.map
         Nchunk = np.ceil(1. / Nthreads * n_samples).astype(np.int)
 
         arglist = [None] * Nthreads
         for i in range(Nthreads):
-          s = i * Nchunk
-          e = s + Nchunk
-	  arglist[i] = (self.lnX, self.data[s:e], self.masks[s:e], self.F[s:e], self.B[s:e], K[s:e], fl, f, g, self.H)
-        result = list(mapfn(fg, [args for args in arglist]))
+          s = int(i * Nchunk)
+          e = int(s + Nchunk)
+	  arglist[i] = (self.lnX, self.F, self.B, self.fl, self.f, self.g, self.H, s, e)  
+        result = list(mapfn(fg, [ars for ars in arglist]))
+        print result
+
         
         nll, grad = result[0]
         for i in range(1, Nthreads):
            nll += result[i][0]
            grad += result[i][1]
        
-        pool.close()
-        pool.terminate()
-        pool.join()
+        Pool.close()
+        Pool.terminate()
+        Pool.join()
         
         return nll, grad 
         
