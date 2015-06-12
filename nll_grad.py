@@ -1,6 +1,14 @@
 import numpy as np
+import h5py
+import time
+a = time.time()
+MS = h5py.File('masked_sampler.hdf5','r')
+MD = h5py.File('masked_data.hdf5','r')
+masked_samplers = MS["masked_sampler"]
+masked_data = MD["masked_data"]
+print time.time()-a
 
-def nll_grad_lnX(lnX, data, masks, F, B, K, fl, f, g, H):
+def nll_grad_lnX(lnX, F, B, fl, f, g, H, s, e):
 
         """
           inputs: 
@@ -20,37 +28,34 @@ def nll_grad_lnX(lnX, data, masks, F, B, K, fl, f, g, H):
                  negative-log-likelihood
                  Gradient w.r.t Log(X). has the same dimension as X
         """
-         
-        
-        n_samples, D = data.shape[0], data.shape[1]
+
+        n_samples= e - s
 
         X = np.exp(lnX)
-
-
         grad = np.zeros_like(X)               
         func  = 0.0
 
-        for p in range(n_samples):
+        for p in np.arange(s,e):
 
-         Kp = K[p]
-         Y = data[p]
-         modelp = F[p]*np.dot(X+fl, Kp) + B[p]
-         mask = masks[p]
-	 Y = Y[mask]
-         modelp = modelp[mask]
-         
+         Kp = masked_samplers[str(p)]     #masked_sampler for datum p 
+         Y = np.array(masked_data[str(p)]) #masked datum p
+         modelp = F[p]*np.dot(X+fl, Kp) + B[p]   #resulting masked model of datum p
+
          ep = Y - modelp
          varp = f + g*np.abs(modelp)
-         gradp = -1.*F[p]*Kp
-         gradp = gradp[:,mask]
-         gainp = (g/2.)*(varp**-1. - ep**2./varp**2.)
 
-         gradp = X[:,None]*gradp*(ep/varp - gainp)[None,:]
-         Gradp = gradp.sum(axis = 1) 
-         grad += Gradp
-         func += 0.5*np.sum(((ep)**2.)/varp) + .5*np.sum(np.log(varp))
-	
+         gainp = (g/2.)*(1./varp - ep*ep/(varp*varp))
+
+ 
+         gradp = X[:,None]*Kp*(ep/varp - gainp)[None,:]
+         Gradp = np.sum(gradp, axis = 1) 
+         grad += -1.*F[p]*Gradp
+         func += 0.5*np.sum(((ep)**2.)/varp) + 0.5*np.sum(np.log(varp))
+        MS.close()
+        MD.close()
         return func, grad
+
+
 
 def reg_lnX(lnX, data, masks, F, B, K, H, epsilon):
 
