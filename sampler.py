@@ -1,8 +1,9 @@
 import ms
 import interp
-import c3
 import numpy as np
-from scipy import sparse
+import scipy
+#import scipy.sparse.linalg as spsl
+from scipy.linalg import solve
 def phi(dx , H , M):
 
   """
@@ -25,7 +26,7 @@ def phi(dx , H , M):
   x = x[:,None]
   y = (x - a)/h1 - k + 2 
   return interp.pi(y)
-
+"""
 def imatrix(data,H):
   
   M = int((data.shape[0])**.5)
@@ -37,20 +38,28 @@ def imatrix(data,H):
   hy = np.dot(chi.T , phi(-dy, H , M).T)
   hf = np.kron(hx.T, hy)
   return hf
-
+"""
 def imatrix_new(M,H,dx,dy):
   
-  chi = np.dot(np.linalg.inv(ms.B(H*M)) , ms.I(H*M))
+  chi = solve(ms.B(H*M) , ms.I(H*M))
   hx = np.dot(phi(-dx, H , M) , chi)
   hy = np.dot(chi.T , phi(-dy, H , M).T)
   hf = np.kron(hx.T, hy)
   
   return hf
   
+def simatrix_new(M,H,dx,dy):
+  
+  chi = np.dot(spsl(ms.B(H*M)) , ms.I(H*M))
+  hx = np.dot(phi(-dx, H , M) , chi)
+  hy = np.dot(chi.T , phi(-dy, H , M).T)
+  hf = np.kron(hx.T, hy)
+  
+  return hf
 
 def test_imatrix_new(M,H,dx,dy):
   
-  chi = np.dot(np.linalg.inv(ms.B(H*M)) , ms.I(H*M))
+  chi = solve(ms.B(H*M) , ms.I(H*M))
   hx = np.dot(phi(-dx, H , M) , chi)
   hy = np.dot(chi.T , phi(-dy, H , M).T)
   hf = np.kron(hx.T, hy)
