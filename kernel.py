@@ -16,6 +16,7 @@ import time
 import george
 from george.kernels import ExpSquaredKernel , ExpKernel , Matern32Kernel , WhiteKernel
 import scipy.optimize as op
+import h5py
 
 sp = pf.open("anderson.fits")[0].data.T
 stars = pf.open("wfc3_f160w_clean_central100.fits")[0].data
@@ -42,16 +43,34 @@ np.random.seed(12345)
 kernel = ExpSquaredKernel(.001, ndim=2) + WhiteKernel(0.01 , ndim = 2)
 
 
+#Kxx = kernel.value(samples , samples)
 mean = np.mean(sp)
 spmm = sp.flatten() - mean
-#alpha = np.linalg.solve(Kxx , spmm)
+#alpha2 = np.linalg.solve(Kxx , spmm)
 
-#np.savetxt("alpha.dat",alpha)
+#np.savetxt("alpha2.dat",alpha2)
 alpha = np.loadtxt("alpha.dat")
+
 bkg  = np.loadtxt("superb_wfc_bkg_iter_5_nfl.txt") 				#background	
 flux = np.loadtxt("superb_wfc_flux_iter_5_nfl.txt")				#flux
 dx = np.loadtxt("wfc3_f160w_clean_central100_matchedfilterpoly_cx.txt")		#delta x
 dy = np.loadtxt("wfc3_f160w_clean_central100_matchedfilterpoly_cy.txt")		#delta y
+
+"""initializing stuff"""
+
+f_pars = h5py.File("anderson_pars.hdf5", 'w')
+#f_bkg = h5py.File("anderson_bkg.hdf5", 'w')
+#f_cx  = h5py.File("anderson_cx.hdf5", 'w')
+#f_cy  = h5py.File("anderson_cy.hdf5", 'w')
+
+#amp_set = f_amp.create_dataset("amp" ,'f8') 
+#bkg_set = f_amp.create_dataset("bkg" , 'f8') 
+#cx_set = f_amp.create_dataset("cx" , 'f8') 
+#cy_set = f_amp.create_dataset("cy" , 'f8') 
+grp_amp = f_pars.create_group('amp')
+grp_bkg = f_pars.create_group('bkg')
+grp_cx = f_pars.create_group('cx')
+grp_cy = f_pars.create_group('cy')
 
 def bfgs_update_FB(p):
     t0 = time.time()
@@ -74,8 +93,8 @@ def bfgs_update_FB(p):
     grad_func = v3_fit_single_patch
     x = op.fmin_l_bfgs_b(grad_func, x0=theta, fprime = None, \
                          args=(Y, masked_psf, f, g), approx_grad = False, \
-                         bounds = [(0.,100.), (1.,10.**7.)], m=10, \
-                         factr=1000., pgtol=1e-16, epsilon=1e-16, maxfun=60)
+                         bounds = [(1.e-10,100.), (1.e-2,10.**7.)], \
+                         factr=10., pgtol=1e-16, epsilon=1e-16, maxfun=60)
     print time.time() - t0
     print "old background=", bkg[p]
     print "old amplitude=" , flux[p] 
@@ -95,10 +114,15 @@ def nll_ctr(theta, data, mask, spmm, mean, flux, bkg, f, g):
     samples2 = np.vstack((x2.flatten(), y2.flatten())).T
     Kxsx = kernel.value(samples2 , samples)
     model = flux*(np.dot(Kxsx, alpha)+mean) +bkg
+
+    data = data.reshape(25,25)[10:-10,10:-10]
+    model= model.reshape(25,25)[10:-10,10:-10]
+    mask = mask.reshape(25,25)[10:-10,10:-10]
     data = data[mask!=0]
     model = model[mask!=0]
     res = data - model
     var = f + g*np.abs(model)
+    
     func = np.sum(res**2. / var + np.log(var))
     return func
     
@@ -107,9 +131,8 @@ def fit_ctr(p, amp, bg):
     func = nll_ctr
     theta = [dx[p] , dy[p]]
     
-    x = op.fmin(func, [theta[0], theta[1]], \
-                args = (stars[p], masks[p], spmm, mean, amp, bg, f, g), \
-                disp = False)
+    x = op.fmin_powell(func, [theta[0], theta[1]], \
+                args = (stars[p], masks[p], spmm, mean, amp, bg, f, g), disp = False)
     print "old dx=", dx[p] 
     print "old dy=", dy[p] 
     print "new dx=", x[0] 
@@ -121,10 +144,18 @@ for p in range(120):
 
   datap = stars[p]
   maskp = masks[p]
-  for i in range(4):
-    bgamp, psf, Y = bfgs_update_FB(p)
-    bkg[p], flux[p] = bgamp[0] , bgamp[1]
-    dx[p], dy[p] = fit_ctr(p, flux[p], bkg[p])
+  print "p=", p
+  
+  
+  bgamp, psf, Y = bfgs_update_FB(p)
+  bkg[p], flux[p] = bgamp[0] , bgamp[1]
+  dx[p], dy[p] = fit_ctr(p, flux[p], bkg[p])
+
+  grp_bkg.create_dataset(str(p) , data = bkg[p])
+  grp_amp.create_dataset(str(p) , data = flux[p])
+  grp_cx.create_dataset(str(p) , data = dx[p])
+  grp_cy.create_dataset(str(p) , data = dy[p])
+  """
   h = 1./25.
   x2 = np.arange(0, 25)*h + 0.5*h - dx[p]*h
   y2 = np.arange(0, 25)*h + 0.5*h - dy[p]*h
@@ -134,6 +165,17 @@ for p in range(120):
   Kxsx = kernel.value(samples2 , samples)
   model = flux[p]*(np.dot(Kxsx, alpha)+mean) +bkg[p]
   
+  chi = (datap - model)/(f + g * np.abs(model))**.5
+  ma = max(np.max(datap[maskp]) , np.max(model[maskp]))
+
+  datap[maskp==0] = np.nan
+  model[maskp==0] = np.nan
+  chi[maskp==0]   = np.nan
+ 
+  datap = datap.reshape(25,25)
+  model = model.reshape(25,25)
+  chi = chi.reshape(25,25)
+
   pl.subplot(1,3,1)
 
   ax = pl.gca()
@@ -166,6 +208,8 @@ for p in range(120):
   ax.set_yticks(())
   pl.show()
 
-  pl.savefig("/home/mj/public_html/psf/trial_kernel__"+str(p)+".png")
+  pl.savefig("/home/mj/public_html/psf/ctr_powell_kernel__"+str(p)+".png")
   
-  pl.close()                 
+  pl.close()
+  """
+f_pars.close()
