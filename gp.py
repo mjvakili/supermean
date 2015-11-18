@@ -9,7 +9,7 @@ import time
 from scipy.linalg import cho_factor, cho_solve
 from interruptible_pool import InterruptiblePool
 from nll_grad import nll_grad_lnX
-from nll_grad_fb import v2_fit_single_patch , v3_fit_single_patch
+from nll_grad_fb import v3_fit_single_patch , v4_fit_single_patch
 from nll_ctr import fit
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -158,11 +158,12 @@ class EM(object):
          g2.create_dataset("a", data = self.B)
          g3.create_dataset("a", data = self.cx)
          g4.create_dataset("a", data = self.cy)
-         f.close()                   
-   
+         f.close()
+ 
      def initialize(self):
          """
          initializing the parameters
+         in case they are not provided
          """        
          self.masks[self.masks == 0] = -1
 	 self.masks[self.masks > 0] = False
@@ -195,24 +196,57 @@ class EM(object):
          X[X<0] = self.fl
          X[X==0] = self.fl
          self.lnX = np.log(X)
+     
+     def update_patch_FB(self, p):
          """
-         XX = np.exp(self.lnX).reshape(self.H*self.M ,self.H*self.M) + self.fl
-         plt.imshow(XX , interpolation = None , norm = LogNorm())
-	 plt.title(r"$X_{\mathtt{initial}}$")        
-	 plt.colorbar()
-         plt.xticks(())
-         plt.yticks(())
-         plt.show()
-
-         gradx = self.func_grad_lnX_Nthreads(self.lnX)[1].reshape(75,75)
-         plt.imshow(np.abs(gradx) , interpolation = None , norm = LogNorm())
-         plt.title(r"$|d\mathtt{NLL}/d(\mathtt{lnX})|_{\mathtt{initial}}$")
-         plt.colorbar()
-         plt.xticks(())
-         plt.yticks(())
-         plt.show()
+         updating the amplitude, and background
+         of patch p
          """
+         theta = self.B[p], self.F[p]
+         h = 1./25
+         Dx, Dy = self.cx[p], self.cy[p]
+         x2 = np.arange(0, 25)*h + .5*h - Dx*h
+         y2 = np.arange(0, 25)*h + .5*h - Dx*h
+         x2, y2 = np.meshgrid(x2, y2, indexing = "ij")
+  	 samples2 = np.vstack((x2.flatten(), y2.flatten())).T
+         Kxsx = self.kernel.value(samples2, self.samples)
+         psf = np.dot(Kxsx, self.alpha) + self.mean
+         masked_y = self.data[p][maskp!=0]
+         masked_psf = psf[maskp!=0]
+         grad_func = v3_fit_single_patch
+         result = op.fmin_l_bfgs_b(grad_func, x0 = theta, fprime = None, \
+                                   args=(masked_y,masked_psf,f,g), \
+			           approx_grad = False, \
+                                   bounds = [(1.e-10,100.),(1.e-2,10**7.)], \
+                                   factr=10., pgtol=1.e-16, epsilon=1.e-16, \
+			           maxfun=60)
+         self.B[p], self.F[p] = result[0][0], result[0][1]
+     
+     def update_patch_centroid(self, p)
+         """
+         updating the sub-pixel centroid 
+         shifts of patch p
+         """
+         theta = [self.cx[p] , self.cy[p]]
+         func = v4_fit_single_patch
+         result = op.fmin_powell(grad_func, [theta[0],theta[1]], \
+                                 args=(self.data[p],self.mask[p], \
+                                       self.F[p], self.B[p], \
+                                       self.alpha, self.mean, \
+                                       self.f, self.g), \
+                                 bounds = [(-.5,.5),(-.5,.5)])
+         self.cx[p], self.cy[p] = result[0][0], result[0][1]
 
+     def update_FB_centroid(self):
+         """
+         updating all the backgrounds,
+         amplitudes, and centroids
+         """
+         for p in xrange(self.N):
+           self.update_patch_FB(p)
+         for p in xrange(self.N):
+           self.update_patch_centroid(p)
+         
      def lsq_update_FB(self):
 
          """least square optimization of F&B"""
