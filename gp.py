@@ -1,43 +1,26 @@
 import numpy as np
-import ms
-import shifter
-import numpy as np
 import scipy.optimize as op
 from scipy import ndimage
 import h5py
 import time
 from scipy.linalg import cho_factor, cho_solve
 from interruptible_pool import InterruptiblePool
-from nll_grad import nll_grad_lnX
+from nll_grad import nll_grad_X
 from nll_grad_fb import v3_fit_single_patch , v4_fit_single_patch
-from nll_ctr import fit
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
-import sampler
-
-F = h5py.File('samplerx3.hdf5','r')#["sampler"] 
-K = F["samplerx3"]
-Nthreads = 15  #number of threads
+from george.kernels import ExpSquaredKernel , WhiteKernel
 
 def fg(args):
-    return nll_grad_lnX(*args)
-
-
-def fit_single_patch(data, mask, psf, old_flux, old_back, floor, gain):
-    C = floor + gain * np.abs(old_flux * psf + old_back)[mask]
-    A = np.ones((C.size, 2))
-    A[:, 1] = psf[mask]
-    AT = A.T
-    ATICA = np.dot(AT, A / C[:, None])
-    ATICY = np.dot(AT, data[mask] / C)
-    return np.dot(np.linalg.inv(ATICA), ATICY)
+    return nll_grad_X(*args)
 
 class EM(object):
    
-     def __init__(self, data, masks, X, flux, bkg, cx, cy,
+     def __init__(self, data, masks, X, flux, bkg, cx, cy, Nthreads = 16,
                         f = 5.e-2, g = 1.e-2, epsilon = 1e-2,
                         min_iter=5, max_iter=10, check_iter=1, 
-                        tol=1.e-8):
+                        tol=1.e-8, precompute = False,
+                        precompute_alpha = False):
 
          """ 
             inputs of the code: NxD data matrix and NxD mask matrix;
@@ -62,23 +45,25 @@ class EM(object):
          self.dy = cy                       #list of centroid offsets y   
          self.M = int(self.D**.5)
          self.f = f                         #floor variance of noise model
-         self.fl = fl			   #floor of the PSF model
+         #self.fl = fl			   #floor of the PSF model
          self.g = g                         #gain 
-       
 	 self.X = X       
          self.F = flux                 #Creating an N-dimensional Flux vector.
          self.B = bkg
          self.cx = cx
          self.cy = cy
-         """setting up constants throughout iterations"""
+         self.Nthreads = Nthreads
+         self.epsilon = epsilon
+         self.precompute = precompute
+	 self.precompute_alpha = precompute_alpha
+         """setting up objects that remain constant throughout optimization"""
          self.sr_grid()
          self.Kernel()
          self.get_matrix()
          self.get_inv_matrix()
-        
-         #self.initialize()
-         self.alpha_mean()
-         self.update(max_iter, check_iter, min_iter, tol)
+               
+
+         self.run_EM(max_iter, check_iter, min_iter, tol)
         
      def sr_grid(self):
          """
@@ -94,8 +79,7 @@ class EM(object):
          initializing the kernel
          """
          np.random.seed(12345)
-         self.kernel = ExpSquaredKernel(.001, ndim=2) + 
-                       WhiteKernel(.01, ndim=2)
+         self.kernel = ExpSquaredKernel(.001,ndim=2) + WhiteKernel(.01,ndim=2)
    
 
      def get_matrix(self):
@@ -108,7 +92,32 @@ class EM(object):
          """
          computing the inverse of Kxx, this also remains constant
          """
-    	 self.Kxxinv = np.linalg.solve(self.Kxx , np.eye(self.X.shape[0])) 
+         if (self.precompute == False):
+    	   self.Kxxinv = np.linalg.solve(self.Kxx , np.eye(self.X.shape[0])) 
+           f = h5py.File("kxxinv.hdf5","w")
+           g = f.create_group("kxxinv")
+           g.create_dataset("a", data = self.Kxxinv)
+           f.close()
+         else:
+           f = h5py.File("kxxinv.hdf5","r")
+           self.Kxxinv = f["kxxinv"]["a"][:]
+           f.close()
+          
+     def alpha_mean_initial(self):
+         """
+         computing the initial alpha
+         """
+         if (self.precompute_alpha==False):
+           self.mean = np.mean(self.X)
+           Xmm = self.X - self.mean
+           self.alpha = np.linalg.solve(self.Kxx , Xmm)
+           f = h5py.File("init_alpha.hdf5","w")
+           g = f.create_group("alpha")
+           g.create_dataset("a", data = self.alpha)
+           f.close()
+         else:
+           f = h5py.File("init_alpha.hdf5","r")
+           self.alpha = f["alpha"]["a"][:]
 
      def alpha_mean(self):
          """
@@ -119,17 +128,21 @@ class EM(object):
          self.mean = np.mean(self.X)
          Xmm = self.X - self.mean
          self.alpha = np.linalg.solve(self.Kxx , Xmm)
+         
      
      def get_samplers(self):
          """
          computing and writing out the matrices 
          that sample the PSF at the data grid
+         the function nll_grad_X in nll_grad.py
+         needs the samplers
          """
          f1 = h5py.File("sampler.hdf5","w")
          f2 = h5py.File("masked_sampler.hdf5","w")
          g1 = f1.create_group("sampler")
  	 g2 = f2.create_group("masked_sampler")
     	 for p in range(self.N):
+          
            h = 1./25
            x2 = np.arange(0, 25)*h + .5*h -self.cx[p]
            y2 = np.arange(0, 25)*h + .5*h -self.cy[p]
@@ -137,10 +150,8 @@ class EM(object):
   	   samples2 = np.vstack((x2.flatten(), y2.flatten())).T
            Kxsx = self.kernel.value(samples2, self.samples)
 	   K = np.dot(Kxsx, self.Kxxinv)
-    	   
            g1.create_dataset(str(p), data = K)
-	   g2.create_dataset(str(p), data = K[self.masks[i], :])
-
+	   g2.create_dataset(str(p), data = K[self.masks[p], :])
          f1.close()
          f2.close()
      
@@ -220,9 +231,11 @@ class EM(object):
                                    bounds = [(1.e-10,100.),(1.e-2,10**7.)], \
                                    factr=10., pgtol=1.e-16, epsilon=1.e-16, \
 			           maxfun=60)
+         print result[0]
+         print self.B[p], self.F[p]
          self.B[p], self.F[p] = result[0][0], result[0][1]
      
-     def update_patch_centroid(self, p)
+     def update_patch_centroid(self, p):
          """
          updating the sub-pixel centroid 
          shifts of patch p
@@ -235,6 +248,8 @@ class EM(object):
                                        self.alpha, self.mean, \
                                        self.f, self.g), \
                                  bounds = [(-.5,.5),(-.5,.5)])
+         print result[0]
+         print self.cx[p], self.cy[p]
          self.cx[p], self.cy[p] = result[0][0], result[0][1]
 
      def update_FB_centroid(self):
@@ -246,234 +261,86 @@ class EM(object):
            self.update_patch_FB(p)
          for p in xrange(self.N):
            self.update_patch_centroid(p)
-         
-     def lsq_update_FB(self):
 
-         """least square optimization of F&B"""
-         for p in range(self.N):
-           Kp = np.array(K[str(p)])
-           mask = self.masks[p]
-           Y = self.data[p]
-           old_flux, old_back = self.F[p], self.B[p]
-           self.X = np.exp(self.lnX)
-           psf = np.dot(self.X + self.fl, Kp)
-         
-         for i in range(10):
-           old_back, old_flux = fit_single_patch(Y, mask, psf, 
-                                                 old_flux, old_back, 
-                                                 self.f, self.g)
-         self.B[p], self.F[p] = old_back, old_flux
-
-     
-     def bfgs_update_FB(self):
-       
-       MS = h5py.File('masked_samplerx3.hdf5','r')
-       MD = h5py.File('masked_data.hdf5','r')
-       masked_samplers = MS["masked_samplerx3"]#[tr]
-       masked_data = MD["masked_data"]#[tr]
-
-       for p in range(self.N):
-	 #print masked_samplers				
-         Kp = masked_samplers[str(p)]
-         Y = masked_data[str(p)]
-	 theta = self.B[p], self.F[p]
-         psf = np.dot(np.exp(self.lnX) + self.fl, Kp)
-	 grad_func = v3_fit_single_patch
-         #print grad_func
-         x = op.fmin_l_bfgs_b(grad_func, x0=theta, fprime = None, \
-                             args=(Y, psf, self.f, self.g), approx_grad = False, \
-                             bounds = [(0.,100.), (1.,10.**7.)], m=10, factr=1000., pgtol=1e-08, epsilon=1e-08, maxfun=60)
-	 #print p, x
-         self.B[p], self.F[p] = x[0]
-       MS.close()
-       MD.close()
-    
-     def update_centroids(self):
-       
-        MD = h5py.File('masked_data.hdf5','r')
-        masked_data = MD["masked_data"]
-     
-        #updating the sampling matrices: we donot overwrite the original ones because 
-        #the new ones depende on the variance model, and the variance model is not 
-        #perfect at the moment!
-
-        GG  = h5py.File('masked_samplerx3.hdf5','w')   
-        Grp = GG.create_group("masked_samplerx3")
-        for p in range(self.N):
-    
-          xp, yp = fit((self.dx[p], self.dy[p]), \
-                       masked_data[str(p)], self.masks[p], \
-                       self.X, self.F[p], self.B[p], \
-                       self.f, self.g, self.fl)
-          masked_dset = sampler.imatrix_new(self.M, self.H, xp , yp)[: , self.masks[p]]
-          Grp.create_dataset(str(p), data = masked_dset)
-        GG.close()
-        MD.close()
-
-
- 
-     def func_grad_lnX_Nthreads(self, params):
-
-        """
-        Use multiprocessing to calculate negative-log-likelihood and gradinets
-        w.r.t lnX, plus the terms coming from th regularization terms.
-        """
-        n_samples = self.N
-        self.lnX = params
-        #self.fl, self.f, self.g, self.H, Nthreads = args
-
-
-	Pool = InterruptiblePool(Nthreads)
-        mapfn = Pool.map
-        Nchunk = np.ceil(1. / Nthreads * n_samples).astype(np.int)
-
-        arglist = [None] * Nthreads
-        for i in range(Nthreads):
-          s = int(i * Nchunk)
-          e = int(s + Nchunk)
-	  arglist[i] = (self.lnX, self.F, self.B, self.fl, self.f, self.g, self.H, s, e)  
-        result = list(mapfn(fg, [ars for ars in arglist]))    
-        nll, grad = result[0]
-        a = time.time()
-        for i in range(1, Nthreads):
+     def nll_grad_X(self):
+         """
+         Computing the NLL and its gradient wrt X,
+         Computing the reg term and its gradient, 
+         and adding them up.
+         """
+	 Pool = InterruptiblePool(self.Nthreads)
+         mapfn = Pool.map
+         Nchunk = np.ceil(1. / self.Nthreads * self.N).astype(np.int)
+         arglist = [None] * self.Nthreads
+         for i in xrange(self.Nthreads):
+           s = int(i * Nchunk)
+           e = int(s + Nchunk)
+	   arglist[i] = (self.X, self.F, self.B, \
+                         self.f, self.g, s, e)  
+         result = list(mapfn(fg, [ars for ars in arglist]))    
+         nll, grad = result[0]
+         for i in xrange(1,self.Nthreads):
            nll += result[i][0]
            grad += result[i][1]
-        #print "adding up nll's from individual threads", time.time() - a
-        Pool.close()
-        Pool.terminate()
-        Pool.join()
-        #computing the regularization term and its derivative w.r.t lnX
-        reg_func, reg_grad = self.reg_func_grad_lnX() 
-        return nll + reg_func, grad + reg_grad	
+         Pool.close()
+         Pool.terminate()
+         Pool.join()
+         reg_func, reg_grad = self.reg_func_grad_X() 
+         return nll + reg_func, grad + reg_grad	
+
+     def reg_func_grad_X(self):
+         """ 
+         returns regularization term
+         and its derivative wrt X
+         """ 
+         b = int((self.X.shape[0])**.5)
+         Z = self.X.reshape(b,b)
+         c= np.zeros_like(Z)
+         c[:,:-1] += Z[:, 1:]
+         c[:, 1:] += Z[:,:-1]
+         c[1:, :] += Z[:-1,:]
+         c[:-1,:] += Z[1:, :]
+         grad = 2.*self.epsilon*(4.*Z - c).flatten()*self.X 
+         func = self.epsilon*np.sum((Z[:,1:]-Z[:,:-1])**2. + (Z[1:,:]-Z[:-1,:])**2.)
+         return func , grad         
+
+     def update_X(self, maxfuncall):
+         """
+         updaing the super-resolution psf X
+         optimizing the objective function,
+         given the current values of the bkgs,
+         amplitudes, and the centroids.
+         """ 
+         result = op.fmin_l_bfgs_b(self.nll_grad_X,x0=self.X,fprime = None, \
+                                 args=(), approx_grad = False, \
+                                 bounds=[(1e-5, 100.) for _ in self.X],m=10, \
+                                 factr=10.0, pgtol=1e-5, epsilon=1e-8, \
+                                 maxfun=maxfuncall)
+         self.X = result[0]
      
-     def reg_func_grad_lnX(self):
-        """ returns regularization term in NLL
-            and its derivative w.r.t lnX""" 
-      
-        self.X = np.exp(self.lnX)
-
-        b = int((self.D)**.5)
-        Z = self.X.reshape((self.H*b, self.H*b))
-        c= np.zeros_like(Z)
-        c[:,:-1] += Z[:, 1:]
-        c[:, 1:] += Z[:,:-1]
-        c[1:, :] += Z[:-1,:]
-        c[:-1,:] += Z[1:, :]
-        grad = 2.*self.epsilon*(4.*Z - c).flatten()*self.X 
-        #grad = grad*self.X               
-        func  = self.epsilon*np.sum((Z[:,1:]-Z[:,:-1])**2.)+ self.epsilon*np.sum((Z[1:,:]-Z[:-1,:])**2.)
-        return func , grad         
-     
-
-     def bfgs_lnX(self, num_funccalls):
-       
-        x = op.fmin_l_bfgs_b(self.func_grad_lnX_Nthreads, x0=self.lnX, fprime = None, \
-                             args=(), approx_grad = False, \
-                             bounds = [(np.log(1e-5), 0.) for _ in self.lnX], m=10, factr=10.0, pgtol=1e-5, epsilon=1e-8, maxfun=num_funccalls)
-        gx = x[2]["grad"]
-        print x
-        print gx
-        #X = np.exp(self.lnX).reshape(self.H*self.M ,self.H*self.M) + self.fl
-        #plt.imshow(np.abs(gx).reshape(100,100), interpolation = None, norm = LogNorm())
-        #plt.colorbar()
-        #plt.show()
-        self.lnX  = x[0]
-
-     def bfgs_F(self):
-        x = op.fmin_l_bfgs_b(self.func_F,x0=self.F, fprime = self.grad_F,args=(self.lnX, self.B), approx_grad = False, \
-                              bounds = None, m=10, factr=1000., pgtol=1e-02, epsilon=1e-02, maxfun=20)
-        #print x
-        self.F  = x[0]
-
-     def bfgs_B(self):
-        x = op.fmin_l_bfgs_b(self.func_B,x0=self.B, fprime = self.grad_B,args=(self.lnX, self.F), approx_grad = False, \
-                              bounds = None, m=10, factr=1000., pgtol=1e-02, epsilon=1e-02, maxfun=20)
-        #print x
-        self.B  = x[0]
-     
-     
-     def nll(self):
-
-       self.X = np.exp(self.lnX)
-       b  = int((self.D)**.5)
-       Z = self.X.reshape((self.H*b, self.H*b))
-       nll = self.epsilon*np.sum((Z[:,1:]-Z[:,:-1])**2.) + self.epsilon*np.sum((Z[1:,:]-Z[:-1,:])**2.) 
-       for i in range(self.N):
-         Ki = np.array(K[str(i)])
-         Y = self.data[i]
-         model_i = self.F[i]*np.dot(self.X+self.fl, Ki) + self.B[i]
+     def run_EM(self, max_iter, check_iter, min_iter, tol):
          
-         mask = self.masks[i]
-	 Y = Y[mask]
-         model_i = model_i[mask]         
- 
-         var_i = self.f + self.g*np.abs(model_i)
-         residual_i = Y - model_i
-         nll += 0.5*np.sum(((residual_i)**2.)/var_i) + 0.5*np.sum(np.log(var_i))
-       return nll
-     
-     def update(self, max_iter, check_iter, min_iter, tol):
-      
+         self.alpha_mean_initial()
+         self.get_samplers()
+         nll = self.nll_grad_X()[0]
+         print "starting NLL is:", nll
+          
+         for t in range(1, max_iter+1):
 
-        nll = self.nll()
-        print "starting NLL is:", nll
-        np.savetxt("superb_wfc_mean_iter_%d.txt"%(0)       , self.lnX ,fmt='%.64f')
-     
-        for i in range(1, max_iter+1):
-            
-	    a = time.time()
-            self.bfgs_update_FB()
-	    print time.time() - a
-            a = time.time()
-            #self.update_centroids()
-	    print time.time() - a
-            a = time.time()
-            self.bfgs_lnX(200)
-	    print time.time() - a
-            np.savetxt("superb_wfc_mean_iter_%d_nfljadid.txt"%(i)       , self.lnX ,fmt='%.64f')
-            np.savetxt("superb_wfc_flux_iter_%d_nfjadid.txt"%(i)       , self.F ,fmt='%.64f')
-	    np.savetxt("superb_wfc_bkg_iter_%d_nfljadid.txt"%(i)        , self.B ,fmt='%.64f')
-            """
-            if (i==max_iter):
-             X = (np.exp(self.lnX)+self.fl).reshape(self.H*self.M ,self.H*self.M)
-             plt.imshow(X , interpolation = None , norm = LogNorm())
-             plt.title(r"$X_{\mathtt{final}}$")
-             plt.colorbar()
-             plt.xticks(())
-             plt.yticks(())
-             plt.show()"""
-             #np.savetxt("superb_wfc_mean_iter_%d.txt"%(i+1)       , self.lnX ,fmt='%.64f')
-            """  
-             gradx = self.func_grad_lnX_Nthreads(self.lnX)[1].reshape(75,75)
-             plt.imshow(np.abs(gradx) , interpolation = None , norm = LogNorm())
-             plt.title(r"$|d\mathtt{NLL}/d(\mathtt{lnX})|_{\mathtt{final}}$")
-             plt.colorbar()
-             plt.xticks(())
-             plt.yticks(())
-             plt.show()"""
-             
-            """
-	    a = time.time()
-            W = self.func_lnX_grad_lnX(self.lnX, self.data, self.F, self.B, K )
-            print time.time() - a
-            print W
-            
-	    a = time.time()
-	    Q = self.func_lnX_grad_lnX_Nthreads(self.lnX)
-            #self.fl, self.f, self.g, self.H, Nthreads = args
-	    print time.time() - a
-	    print Q
-            
-	    print Q[0] - W[0], np.sum((Q[1] - W[1])**2.)s
-            """
-            if np.mod(i, check_iter) == 0:
-                new_nll =  new_nll = self.nll()
+           self.update_FB_centroid()
+	   self.update_X()
+           self.write_out_pars()
+           self.alpha_mean()
+           self.get_samplers()
+
+
+           if np.mod(i, check_iter) == 0:
+                new_nll = self.nll_grad_X()[0]
                 print 'NLL at step %d is:' % (i+1), new_nll
-            if (((nll - new_nll) / nll) < tol) & (min_iter < i):
+           if (((nll - new_nll) / nll) < tol) & (min_iter < i):
                 print 'Stopping at step %d with NLL:' % i, new_nll
                 self.nll = new_nll
                 break
-            else:
+           else:
                 nll = new_nll
-        self.nll = new_nll
-        F.close()
+         self.nll = new_nll
