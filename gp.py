@@ -8,6 +8,7 @@ from interruptible_pool import InterruptiblePool
 from nll_grad import nll_grad_X
 from nll_grad_fb import v3_fit_single_patch , v4_fit_single_patch
 import matplotlib.pyplot as plt
+plt.switch_backend("Agg")
 from matplotlib.colors import LogNorm
 from george.kernels import ExpSquaredKernel , WhiteKernel
 
@@ -16,7 +17,7 @@ def fg(args):
 
 class EM(object):
    
-     def __init__(self, data, masks, X, flux, bkg, cx, cy, Nthreads = 16,
+     def __init__(self, data, masks, X, flux, bkg, cx, cy, Nthreads = 20,
                         f = 5.e-2, g = 1.e-2, epsilon = 1e-2,
                         min_iter=5, max_iter=10, check_iter=1, 
                         tol=1.e-8, precompute = False,
@@ -41,9 +42,6 @@ class EM(object):
          self.epsilon = epsilon             #smoothness parameter                                  
          self.data = np.atleast_2d(data)    #making sure the data has the right dimension
          self.masks = np.atleast_2d(masks)  #making sure the mask has the right dimension
-         self.dx = cx                       #list of centroid offsets x
-         self.dy = cy                       #list of centroid offsets y   
-         self.M = int(self.D**.5)
          self.f = f                         #floor variance of noise model
          #self.fl = fl			   #floor of the PSF model
          self.g = g                         #gain 
@@ -80,7 +78,6 @@ class EM(object):
          """
          np.random.seed(12345)
          self.kernel = ExpSquaredKernel(.001,ndim=2) + WhiteKernel(.01,ndim=2)
-   
 
      def get_matrix(self):
          """
@@ -118,6 +115,7 @@ class EM(object):
          else:
            f = h5py.File("init_alpha.hdf5","r")
            self.alpha = f["alpha"]["a"][:]
+           self.mean = np.mean(self.X)
 
      def alpha_mean(self):
          """
@@ -141,17 +139,27 @@ class EM(object):
          f2 = h5py.File("masked_sampler.hdf5","w")
          g1 = f1.create_group("sampler")
  	 g2 = f2.create_group("masked_sampler")
-    	 for p in range(self.N):
           
+    	 #self.Kxxinv = np.linalg.solve(self.Kxx , np.eye(self.X.shape[0])) 
+    	 for p in range(self.N):
+            
            h = 1./25
-           x2 = np.arange(0, 25)*h + .5*h -self.cx[p]
-           y2 = np.arange(0, 25)*h + .5*h -self.cy[p]
+           x2 = np.arange(0, 25)*h + .5*h -self.cx[p]*h
+           y2 = np.arange(0, 25)*h + .5*h -self.cy[p]*h
            x2, y2 = np.meshgrid(x2, y2, indexing = "ij")
   	   samples2 = np.vstack((x2.flatten(), y2.flatten())).T
            Kxsx = self.kernel.value(samples2, self.samples)
+           #a = time.time()
 	   K = np.dot(Kxsx, self.Kxxinv)
-           g1.create_dataset(str(p), data = K)
-	   g2.create_dataset(str(p), data = K[self.masks[p], :])
+           #self.alpha = np.loadtxt("alpha.dat")
+           #nm = np.dot(Kxsx, self.alpha)+ self.X.mean()
+           #plt.imshow(nm.reshape(25,25), norm=LogNorm())
+           #plt.savefig("/home/mj/public_html/nm"+str(p)+".png")
+           #plt.close()
+           #print time.time() - a 
+           #g1.create_dataset(str(p), data = K)
+	   #g2.create_dataset(str(p), data = K[self.masks[p], :])
+           print p
          f1.close()
          f2.close()
      
@@ -222,17 +230,18 @@ class EM(object):
   	 samples2 = np.vstack((x2.flatten(), y2.flatten())).T
          Kxsx = self.kernel.value(samples2, self.samples)
          psf = np.dot(Kxsx, self.alpha) + self.mean
+         maskp = self.masks[p]
          masked_y = self.data[p][maskp!=0]
          masked_psf = psf[maskp!=0]
          grad_func = v3_fit_single_patch
          result = op.fmin_l_bfgs_b(grad_func, x0 = theta, fprime = None, \
-                                   args=(masked_y,masked_psf,f,g), \
+                                   args=(masked_y,masked_psf,self.f,self.g),\
 			           approx_grad = False, \
                                    bounds = [(1.e-10,100.),(1.e-2,10**7.)], \
                                    factr=10., pgtol=1.e-16, epsilon=1.e-16, \
 			           maxfun=60)
-         print result[0]
-         print self.B[p], self.F[p]
+         #print result[0]
+         #print self.B[p], self.F[p]
          self.B[p], self.F[p] = result[0][0], result[0][1]
      
      def update_patch_centroid(self, p):
@@ -242,12 +251,11 @@ class EM(object):
          """
          theta = [self.cx[p] , self.cy[p]]
          func = v4_fit_single_patch
-         result = op.fmin_powell(grad_func, [theta[0],theta[1]], \
-                                 args=(self.data[p],self.mask[p], \
+         result = op.fmin_powell(func, [theta[0],theta[1]], \
+                                 args=(self.data[p],self.masks[p], \
                                        self.F[p], self.B[p], \
                                        self.alpha, self.mean, \
-                                       self.f, self.g), \
-                                 bounds = [(-.5,.5),(-.5,.5)])
+                                       self.f, self.g))
          print result[0]
          print self.cx[p], self.cy[p]
          self.cx[p], self.cy[p] = result[0][0], result[0][1]
@@ -262,12 +270,13 @@ class EM(object):
          for p in xrange(self.N):
            self.update_patch_centroid(p)
 
-     def nll_grad_X(self):
+     def nll_grad_X(self, params):
          """
          Computing the NLL and its gradient wrt X,
          Computing the reg term and its gradient, 
          and adding them up.
          """
+         self.X = params
 	 Pool = InterruptiblePool(self.Nthreads)
          mapfn = Pool.map
          Nchunk = np.ceil(1. / self.Nthreads * self.N).astype(np.int)
@@ -276,12 +285,18 @@ class EM(object):
            s = int(i * Nchunk)
            e = int(s + Nchunk)
 	   arglist[i] = (self.X, self.F, self.B, \
-                         self.f, self.g, s, e)  
+                         self.f, self.g, s, e)
+         #result = list(fg(ars) for ars in arglist)
          result = list(mapfn(fg, [ars for ars in arglist]))    
          nll, grad = result[0]
          for i in xrange(1,self.Nthreads):
            nll += result[i][0]
            grad += result[i][1]
+         #print nll
+         #print grad
+         #plt.imshow(self.X.reshape(101,101), interpolation = "None", norm = LogNorm())
+         #plt.savefig("/home/mj/public_html/x.png")
+         #plt.close()
          Pool.close()
          Pool.terminate()
          Pool.join()
@@ -301,7 +316,8 @@ class EM(object):
          c[1:, :] += Z[:-1,:]
          c[:-1,:] += Z[1:, :]
          grad = 2.*self.epsilon*(4.*Z - c).flatten()*self.X 
-         func = self.epsilon*np.sum((Z[:,1:]-Z[:,:-1])**2. + (Z[1:,:]-Z[:-1,:])**2.)
+         func = self.epsilon*np.sum((Z[:,1:]-Z[:,:-1])**2.) + \
+                self.epsilon*np.sum((Z[1:,:]-Z[:-1,:])**2.)
          return func , grad         
 
      def update_X(self, maxfuncall):
@@ -311,24 +327,22 @@ class EM(object):
          given the current values of the bkgs,
          amplitudes, and the centroids.
          """ 
-         result = op.fmin_l_bfgs_b(self.nll_grad_X,x0=self.X,fprime = None, \
-                                 args=(), approx_grad = False, \
-                                 bounds=[(1e-5, 100.) for _ in self.X],m=10, \
-                                 factr=10.0, pgtol=1e-5, epsilon=1e-8, \
-                                 maxfun=maxfuncall)
+         result = op.fmin_l_bfgs_b(self.nll_grad_X,x0=self.X,fprime = None,args=(), approx_grad = False,bounds=[(1e-5, 100.) for _ in self.X],factr=10.0, pgtol=1e-5, epsilon=1e-8)
          self.X = result[0]
      
      def run_EM(self, max_iter, check_iter, min_iter, tol):
          
          self.alpha_mean_initial()
+         print "a"
          self.get_samplers()
-         nll = self.nll_grad_X()[0]
-         print "starting NLL is:", nll
+         print "b"
+         #nll = self.nll_grad_X()[0]
+         #print "starting NLL is:", nll
           
          for t in range(1, max_iter+1):
 
-           self.update_FB_centroid()
-	   self.update_X()
+           #self.update_FB_centroid()
+	   self.update_X(20)
            self.write_out_pars()
            self.alpha_mean()
            self.get_samplers()
