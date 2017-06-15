@@ -1,41 +1,13 @@
-
-\documentclass[12pt,letterpaper]{report}
-
-\usepackage[final]{graphicx}
-
-\usepackage{color, hyperref}
-\definecolor{linkcolor}{rgb}{0,0,0.2}
-\hypersetup{colorlinks=true,linkcolor=linkcolor,citecolor=linkcolor,
-            filecolor=linkcolor,urlcolor=linkcolor}
-\hypersetup{pageanchor=false}
-
-\usepackage{indentfirst}
-\usepackage[tbtags]{amsmath}
-\usepackage{amsfonts}
-\usepackage{amssymb}
-\usepackage{booktabs}
-\usepackage{url}
-
-% Custom AAS macros:
-\usepackage{aas_macros}
-
-% Bibliography:
-\usepackage{natbib}
-\bibliographystyle{apj}
-%\usepackage{mn2e-breakabs}
-
-
-
-% Algorithms:
-\usepackage{algorithmic,algorithm}
-
-% Commands:
+\documentclass[onecolumn]{aastex61}
+\pdfoutput=1 %for arXiv submission
+\usepackage{amsmath,amstext}
+\usepackage[T1]{fontenc}
+\usepackage{apjfonts} 
+\usepackage[figure,figure*]{hypcap}
 
 \renewcommand*{\sectionautorefname}{Section} %for \autoref
 \renewcommand*{\subsectionautorefname}{Section} %for \autoref
-\definecolor{dred}{rgb}{0.75,0.,0.}
-\definecolor{darkred}{rgb}{0.5,0.,0.}
-\definecolor{darkgreen}{rgb}{0.,0.5,0.}
+
 \definecolor{dred}{rgb}{0.75,0,0}
 \definecolor{darkred}{rgb}{0.5,0,0}
 \definecolor{darkgreen}{rgb}{0,0.5,0}
@@ -45,92 +17,52 @@ linkcolor=darkblue,
 filecolor=darkgreen,
 urlcolor=darkred,
 citecolor=darkblue}
+
+\DeclareMathOperator*{\argmax}{arg\,max}
 \newcommand{\beq}{\begin{equation}}
 \newcommand{\eeq}{\end{equation}}
-\newcommand{\lang}{\langle}
-\newcommand{\ra}{\rangle}
-\newcommand{\vep}{\bm{\epsilon}}
-\newcommand{\ep}{\epsilon}
-\newcommand{\pars}{\vec{\theta}}
-\newcommand{\dev}{\mathrm{d}}
-\newcommand{\ngal}{n_{g}}
-\newcommand{\gmf}{g(N)}
-\newcommand{\mr}{M_{\rm r}}
-\newcommand{\rpp}{r_{\rm p}}
-\newcommand{\mzero}{\log M_{0}}
-\newcommand{\mone}{\log M_{1}}
-\newcommand{\mmin}{\log M_{\rm min}}
-\newcommand{\sigmam}{\sigma_{\log \rm M}} 
-\newcommand{\wpp}{w_{\rm p}} 
 
-\newcommand{\acen}{\mathcal{A}_{\rm cen}}
-\newcommand{\asat}{\mathcal{A}_{\rm sat}}
-\newcommand{\todo}[1]{{\em \textcolor{red}{ #1}}}
-
-\newcommand{\argmax}{\mathrm{argmax}}
-\newcommand{\mstar}{h^{-1}M_\odot}
-
-
-
-\newcommand{\lcdm}{\Lambda {\rm CDM}}
-\newcommand{\mean}[2]{\left\langle#1 \vert {#2}\right\rangle}
-
-%%% HALO OCCUPATION DISTRIBUTION %%%
-\newcommand{\nsat}{N_\mathrm{s}}
-\newcommand{\ncen}{N_\mathrm{c}}
-\newcommand{\pnm}[2]{p(#1|#2)}
-
-\newcommand{\mhalo}{M_{\rm h}}
-\newcommand{\mvir}{M_\mathrm{vir}} 
-
-\newcommand{\dndmvir}{\frac{\dd n}{\dd\mvir}}
-\newcommand{\dndmhalo}{\frac{\dd n}{\dd\mhalo}}
-\newcommand{\dndmvirprime}{\frac{\dd n}{\dd\mvir'}}
-
-%%% CLUSTERING STATISTICS %%%
-\newcommand{\xigg}{\xi_{\mathrm{gg}}}
-\newcommand{\xihh}{\xi_{\mathrm{hh}}}
-\newcommand{\xiggr}{\xi_{\mathrm{gg}}(r)}
-\newcommand{\xiggroneh}{\xi^{1h}_{\mathrm{gg}}(r)}
-\newcommand{\xiggrtwoh}{\xi^{2h}_{\mathrm{gg}}(r)}
-\newcommand{\ngalaxy}{\bar{n}_{\mathrm{g}}}
-
-% General formatting:
-\newcommand{\paper}{Chapter}
-
-% Foreign text:
-\newcommand{\foreign}[1]{\emph{#1}}
-\newcommand{\etal}{\foreign{et\,al.}}
-\newcommand{\etc}{\foreign{etc.}}
-\newcommand{\eg}{\foreign{eg.}}
-
-% Project references:
 \newcommand{\project}[1]{{\textsl{#1}}}
 \newcommand{\sdss}{\project{SDSS}}
 \newcommand{\boss}{\project{BOSS}}
 \newcommand{\hst}{\project{HST}}
 \newcommand{\wfc}{\project{WFC3}}
 
-\title{Super-resolution PSF model of HST WFC3-IR\chaplabel{wfc3ir}}
+\shorttitle{wfc3-ir super-sampled psf}
+\shortauthors{Vakili, Fadely, and Hogg}
 
+\begin{document}
+
+\title{Inference of the Super-resolution PSF model of HST WFC3-IR Channel}
+
+\author{Mohammadjavad~Vakili}
+\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University, 726 Broadway, New York, NY, 10003}
+\author{Ross~Fadely}
+\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University, 726 Broadway, New York, NY, 10003}
+\affiliation{Insight Data Science, New York, NY}
+\author{David~W.~Hogg}
+\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University, 726 Broadway, New York, NY, 10003}
+\affiliation{Flatiron institute, 160 5th Avenue, New York, NY, 10010}
+\affiliation{Center for Data Science, New York University, 60 5th Ave, New York, NY, 10010}
+\affiliation{Max-Planck-Institut f\"ur Astronomie, K\"onigstuhl 17, D-69117 Heidelberg, Germany}
 
 \begin{abstract}
-
-Obtaining an accurate model of the Point Spread Function is crucial for reliable point source photometry, astrometry, and weak lensing studies.
+Achieving an accurate model of the Point Spread Function is crucial for many applications such as reliable point source photometry, astrometry, and weak lensing studies.
 The PSF model of the $\hst$ $\wfc$ IR channel does not meet the accuracy required by these science goals. 
 In addition, the PSF of the $\hst$ $\wfc$ IR channel is poorly sampled. Weak lensing studies of poorly resolved images of faint distant galaxies demand 
 excellent knowledge of the PSF sampled at a resolution higher than that of the $\hst$ $\wfc$ pixels.
 
-In this \paper\, we present a generative forward model of every image taken by the $\wfc$ IR channel as a set of a number of point sources convolved
+In this work, we present a generative forward model of images taken by the $\wfc$ IR channel as a set of a number of point sources convolved
 with the instrument PSF. We focus on modeling the pixel-convolved PSF, which is the optical PSF convolved with the pixel response function. 
 
-In particular, we model the images of point sources observed in the calibration program of the $\hst$ $\wfc$ IR channel in the \emph{F160W} bandpass. 
-We expect the inference of the super-resolution PSF in other filters of the IR channel to follow a similar procedure. 
-We discuss how the optimal solution of the problem can be found by adopting a variance model that correctly takes into account the model 
-uncertainty, a regularization term that imposes a smoothness condition on the super-resolution PSF, and masking strategy for reducing the impact of overlapping sources on 
-likelihood optimization. 
+%We expect the inference of the super-resolution PSF in other filters of the IR channel to follow a similar procedure. 
+We discuss how the optimal solution of the problem can be found by adopting a variance model that correctly takes into account the model uncertainty, a regularization term that imposes a smoothness condition on the super-resolution PSF, and masking strategy for reducing the impact of overlapping sources on likelihood optimization.
 
-\end{qbstract}
+In order validate this model, first we generate a set of realistic under-sampled images of point sources with an assumed higher resolution PSF. We then use our model to accurately recover this simulated PSF from the generated images. Afterwards, we apply our methodology to model the the images of point sources observed by the $\hst$ $\wfc$ IR channel in the \emph{F160W} bandpass. 
+
+\end{abstract}
+
+\keywords{methods: data analysis ---techniques: image processing}
 
 \section{Introduction}
 
@@ -171,16 +103,15 @@ Development of optical models of the PSF are valuable efforts for simulation, va
 that can affect astronomical inferences \citep{great3,galsim}. In practice, however, using the optical PSF for photometry, astrometry and weak lensing studies 
 requires fitting a star's model to the wavefront PSF model. The major drawbacks of this approach are the following: $(i)$ This approach does not make use of the available observed 
 data, and $(ii)$ it makes strong assumptions about the sensitivity of detector pixels when it is used for model fitting. Therefore we attempt to build a 
-data-driven or empirical model of the PSF. From now on in this \paper\, we refer to the pixel-convolved PSF as the PSF. 
+data-driven or empirical model of the PSF. From now on in this paper, we refer to the pixel-convolved PSF as the PSF. 
 
-This \paper\ is structured as follows: In Section~\ref{sec:hstdata} we discuss the observations and data reduction. In Section~\ref{sec:hstmethod} we discuss the algorithm we 
+This paper is structured as follows: In Section~\ref{sec:hstdata} we discuss the observations and data reduction. In Section~\ref{sec:hstmethod} we discuss the algorithm we 
 have developed for inferring the super-resolution PSF model of the $\hst$ $\wfc$ IR channel observations. In Section~\ref{sec:hstresults} we present the preliminary results, and %FIXME
-in Section~\ref{sec:hstsummary} we summarize and conclude. 
+in Section~\ref{sec:hstsummary} we summarize and conclude.
 
 \section{Data}\label{sec:hstdata}
-
 The $\wfc$ IR camera takes images through four filters: F105W, F125W, F140W, F160W.
-In what follows in the rest of this \paper\ we focus on modeling the images of point sources in the F160W filter of $\hst$ $\wfc$ IR channel. 
+In what follows in the rest of this work we focus on modeling the images of point sources in the F160W filter of $\hst$ $\wfc$ IR channel. 
 In our analysis, we make use of the FLT images that are calibrated with the recent models of charge transfer efficiency, flat-field, etc. 
 We choose not to use drizzled images \citep{drizzle,astrodrizzle} because they introduce correlated noise and 
 distortions to the PSF that are not consistent across the image (a new algorithm developed by \citealt{olic} for the WFIRST mission does not suffer from these issues). 
@@ -195,7 +126,7 @@ value. The Source Extractor configuration file used in our analysis is shown in 
 The FLT files obtained from the HST MAST archive \footnote{\url{https://archive.stsci.edu}} are accompanied by Data Quality extension files. 
 While extracting the super-resolution PSF model from the point sources in FLT images, pixels with data quality other than zero are flagged and we do not include them in model fitting. This requirement ensures that the damaged pixels do not contribute to the PSF model. For each point source, we extract a 25 pixels $\times$ 25 pixels patch that is centered on the brightest pixel of the point source. The Neural-Network weights for Source Extractor star-galaxy separation is available in \url{https://github.com/mjvakili/supermean/blob/master/default.nnw}.
 
-\clearpage
+%\clearpage
 
 \begin{table}
 \begin{center}
@@ -246,14 +177,58 @@ While extracting the super-resolution PSF model from the point sources in FLT im
 \end{center}
 \end{table}
 
-\clearpage
+%\clearpage
 
 \section{Method}\label{sec:hstmethod}
+In this section, we describe the generative model we use to infer the 
+pixel-convolved Point Spread Function of the F160W filter. 
+Under the assumption that the pixels are not correlated, the brightness of 
+every pixel in a given patch of sky is given by 
+\beq
+y_i = g N_i + e_i,
+\eeq
+where $N_i$ is the number of photons landing on pixel $i$, $g$ is the instrument gain which is determined by the quantum efficiency of the detector, and $e_i$ is the per-pixel noise of pixel $i$ resulting from sky or the electron read-out. 
+$N_i$ is a random variable which is drawn from a Poisson distribution. The expected value of $N_i$ is the model evaluated at pixel $i$
+\beq
+N_i \sim \text{Poisson} \; (m_i),
+\eeq
+where $m_i$ is determined by the expected number of photons from the background sky and the astronomical objects (point sources in this study) that land on pixel $i$ at a given time interval, as well as the pixel-convolved PSF. 
+In the limit of a large number of photons, the central limit theorem implies that 
+$N_i$ must be Gaussian distributed with a mean and a variance given by $m_i$. 
+Therefore, $gN_i$ is Gaussian-distributed random variable with a mean and a variance given by $gm_i$:
 
-\subsection{generative model}
+\begin{eqnarray}
+gN_i &\sim& \mathcal{N}(\tilde{\mu}_i , \tilde{\sigma}_i^2), \;\;\; \text{for large}\;\;\; N_i\\
+\mu_i &=& \sigma_i^2 = gm_i
+\end{eqnarray}
+On the other hand, $e_i$ can be well described by a random variable with Gaussian distribution 
+\beq
+e_i \sim \mathcal{N}(0 , \sigma^2).
+\eeq
+As a result, we can write down the underlying distribution of 
+the brightness of every detector pixel
+\begin{eqnarray}
+y_i &\sim& \mathcal{N}(\mu_i , \nu_i^{2}), \label{eq:yi1} \\
+\mu_i &=& gm_i, \label{eq:yi2} \\
+\nu_i^{2} &=& \sigma^{2} + gm_i. \label{eq:yi3} 
+\end{eqnarray}
 
-We build our empirical model of the PSF by assuming that a given point source at the center of a patch can be described by 
-the following quantities: 
+Equations~\ref{eq:yi1},~\ref{eq:yi2},~\ref{eq:yi3} imply that the brightness of 
+
+\subsection{patch fitting}
+
+We aim to infer the super-resolution PSF of the $\wfc$-IR channel by optimizing a forward model 
+of point sources observed by this instrument. As we described in Section~\ref{sec:hstdata}, the final 
+data product used in this study is a set of 25 pixels $\times$25 pixels patches centered around point sources. 
+
+Let us denote this data vector by $\{\mathbf{d}_{n}\}_{n=1}^{N_\text{patches}}$, where $N_\text{patches}$ is the total number of patches. In other words, $\mathbf{d}_{n}$ is the observed 625-dimensional vector describing the brightness of the pixels in the 25 pixels $\times$ 25 pixels patch $n$. Assuming that the model and the noise model describing patch $n$ are given by two 625 dimensional vectors $\mathbf{m}_{n}$ and $\mathbf{s}_{n}$, we have:
+\begin{eqnarray}
+\mathbf{d}_{n} &=& \mathbf{m}_{n} + \mathbf{s}_{n}, \label{eq:model1} \\
+s_{n,i} &\sim& \mathcal{N} (0 , \sigma^2 + g m_{n,i}), 
+\end{eqnarray}
+where $s_{n,i}$ and $m_{n,i}$ denote the i-th components of the vectors $\mathbf{s}_{n}$ and $\mathbf{m}_{n}$ respectively.
+
+We build our empirical model of the point sources $\{\mathbf{m}_{n}\}_{n=1}^{N_\text{patch}}$ by assuming that a given point source at the center of a patch can be described by the following quantities: 
 
 \begin{itemize}
 \item A global solution for the super-resolution PSF $X$ that is shared between all point sources across the field of view. We assume 
@@ -267,19 +242,15 @@ respect to the center of the patch. Because we have centered our 25 $\times$ 25 
 \item Flux quantity $f_n$ which is related to the brightness of the point source in each patch.
 
 \item A background quantity $b_n$ which sets the brightness level of the background sky in each patch.
-
 \end{itemize}
 
 Given these ingredients, we write down the generative forward model of the point sources in the center of patches in the following way:
 
-\begin{eqnarray} \mathbf{d}_{n} &=& \mathbf{m}_{n} + \mathrm{noise}, \label{eq:model1} \\
-       m_{n,i} &=& f_{n}K^{(n)}_{il} (\Delta_n) X_{l} + b_{n}. 
+\beq 
+ m_{n,i} = f_{n}K^{(n)}_{il} (\Delta_n) X_{l} + b_{n}. 
 \label{eq:model}
-\end{eqnarray} 
+\eeq
 
-In Eq.~\ref{eq:model1}, $\mathbf{d}_{n}$ is the observed 625-dimensional vector describing the brightness of the pixels in the 25 pixels $\times$ 25 pixels patch $n$. 
-$\mathbf{m}_{n}$ is the model that describes the pixel-convolved model of the point source sitting on the center of the patch $n$ with the same dimensionality. The 
-noise term $\mathrm{noise}$ has a variance that we present shortly.
 In Eq.~\ref{eq:model}, the operator $K^{(n)}(\Delta_n)$ is a linear operator that maps the super-resolution PSF $X$ to a downsampled PSF at the native 
 data grid. That is, when this operator acts on $X$, it samples $X$ on a downsampled grid (with the same resolution as the observations) 
 that is shifted with respect to the grid on which $X$ is defined. The shift between the two grids is given by the vector $\Delta_n = (\Delta x_n , \Delta y_n)$.
@@ -293,7 +264,6 @@ It is worth noting that there exist many possibilities for designing the samplin
 choose is bilinear interpolation. But after applying this method to simulated PSFs, we find that this method lacks the accuracy we 
 need. Ideally, one could use a sinc interpolation \citep{bickerton,galsim}, which is an optimal choice for preserving information.
 But we find sinc interpolation to be computationally demanding. Under same assumptions, we experimented with Gaussian Process interpolation for designing the downsampling matrix $K$, but Gaussian Process interpolation requires additional computing time to set hyper parameters.
-
 
 The factor by which the PSF is undersampled varies from one filter to another. Our strategy for inferring the super-resolution of the PSF model of F160W filter is as follows. 
 We aim to estimate $X$ on a 75 pixels $\times$ 75 pixels grid, which is a resolution three times that of the native pixel grid of the observations.
@@ -310,15 +280,7 @@ In order to estimate the PSF, we optimize the following likelihood function with
 \begin{eqnarray} -2 \ln L &=& -2 \sum_{n=1}^{N_{patches}} \ln L_{n} \label{eq:total} , \\
 -2 \ln L_{n} &=& \sum_{i=1}^{N_{\rm pix}} \Big( \frac{\big(d_{n,i} - m_{n,i} \big)^{2}}{s^{2}_{n,i}} + \ln(2 \pi s_{n,i}^{2}) \Big) \label{eq:patch},
 \end{eqnarray}
-
-where $L_{n}$ is the likelihood of patch $n$, $L$ is the likelihood of the entire astronomical scene, $s_{n,i}$ is the $i$th component of the 625 dimensional vector $\mathbf{s}_n$, and 
-$\mathbf{s}_n^{2}$ is variance of the noise model in patch $n$. The variance is composed of two terms, one arising from the Gaussian readout noise and another arising from the Poisson noise.
-Therefore the total variance is given by a constant per-pixel variance of a Gaussian noise and a gain-like term that is proportional to the model $\mathbf{m}_{n}$ defined in Eqs.~\ref{eq:model1,model}:
-\beq
-\mathbf{s}_n^{2} = \sigma^{2} + g.\mathbf{m}_{n},
-\label{eq:variance}
-\eeq
-where we extract Gaussian variance $\sigma^{2}=0.01$ and gain $g=0.05$ from the $\hst$ data. 
+where $L_{n}$ is the likelihood of patch $n$, $L$ is the likelihood of the entire astronomical scene.
 
 It is important to note that our forward model of the $\wfc$ IR 
 observations given by Eq.~\ref{eq:model} suffers from multiple degeneracies. The first degeneracy is between 
@@ -367,6 +329,8 @@ by optimizing the regularized cost function $C_{\rm reg}$ given in Eq.~\ref{eq:r
 interpolate it such that it is centered on the center of the 75 $\times$ 75 grid. We repeat these iterations until the value of regularized cost function 
 $C_{\rm reg}$ converges.
 
+\subsection{Addressing light contamination by nearby sources}
+
 So far we have not addressed the problem of how our generative forward model of the patches takes into account the contamination arising from overlapping 
 or nearby sources. In order to alleviate this issue, we introduce an additional noise model for identifying and masking out pixels that are 
 in ill-fit portions of the patches.
@@ -396,6 +360,15 @@ do not contribute to computation of $L_n$ and its derivatives with respect to mo
 We set the parameter $q$ to 1. We note that this choice of does a good job at masking out the pixels that receive light from the nearby or overlapping sources. 
 In principle $q$ needs to decrease iteratively as our knowledge of the PSF improves. In this work however, we choose to hold the value of $q$ fixed at one. 
 
+\subsection{Setting the smoothness regularization}
+
+Note that we also need to set the strength of the smoothness regularization term $\epsilon$. Here, we can take advantage of the patches that were not used 
+in training the PSF model to perform cross-validation. Cross-validation can be done in the following way. A set of values $S_{\epsilon}$ for the parameter $\epsilon$ need to be selected. For every $\epsilon$ in $S_{\epsilon}$, the optimization procedure as described above can be followed to to estimate $X_{\epsilon}$ which is the estimated $X$ corresponding to $\epsilon$. 
+
+Then one can optimize the patch negative log-likelihood $-2\ln L_n$ given in Eq.~\ref{eq:patch} to find a solution for $\{f_n,b_n,\Delta_n\}$
+variables for every patch in the cross-validation set. Afterwards, the optimal values of $-2\ln L_n$ in cross-validation patches can be summed up to 
+compute the cross-validation score $C_{\rm cv}$ as a function of the regularization strength $\epsilon$.
+In the end, the PSF solution $X_{\epsilon}$ that minimizes this cross-validation cost function will be selected as the optimal solution.
 
 %\begin{algorithm} 
 %\caption{The procedure for Inferring the Super-Resolution PSF}
@@ -430,163 +403,27 @@ In principle $q$ needs to decrease iteratively as our knowledge of the PSF impro
 %\end{algorithmic}
 %\end{algorithm}
 
-\section{Preliminary Results}\label{sec:hstresults}
 
-With the ingredients of our methodology explained in Section~\ref{sec:hstmethod}, we now present the results of applying our 
-method to the observations of the point sources in the $\hst$ $\wfc$ IR channel. We train our PSF model with a number of 
-patches that were selected such that majority of them only contain one point source. 
+\section{Results}\label{sec:hstresults}
 
-In principle given the methodology explained in Section~\ref{sec:hstmethod}, we can train our forward model on patches with arbitrary 
-number of stars. But in order to minimize the training time as much as possible, we select a set of isolated and 
-relatively high signal-to-noise ratio stars as our training sample.
-It is important to note that selecting patches containing isolated sources does not necessarily guarantee that there is \emph{no} light contamination 
-by the nearby sources. %Even in the absence of additional sources in a given patch, there could be some light contamination by bright objects in nearby patches.
-
-Therefore it is necessary to follow the procedure explained in the previous section to clip the pixels that may have received light 
-contamination from the nearby sources. The parameter $q$ will be held at the constant value of $q=1$ and any pixel with $\chi^{2}_{\rm clip} > 3 $ 
-will not be permitted to contribute to the likelihood function. 
-This will ensure that the ill-fit portions of the training pixels will not bias the final PSF estimate. 
-
-Note that we also need to set the strength of the smoothness regularization term $\epsilon$. Here, we can take advantage of the patches that were not used 
-in training the PSF model to perform cross-validation. Cross-validation can be done in the following way. A set of values $S_{\epsilon}$ for the parameter $\epsilon$ need to be selected. For every $\epsilon$ in $S_{\epsilon}$, the optimization procedure as described above can be followed to to estimate $X_{\epsilon}$ which is the estimated $X$ corresponding to $\epsilon$. 
-
-Then one can optimize the patch negative log-likelihood $-2\ln L_n$ given in Eq.~\ref{eq:patch} to find a solution for $\{f_n,b_n,\Delta_n\}$
-variables for every patch in the cross-validation set. Afterwards, the optimal values of $-2\ln L_n$ in cross-validation patches can be summed up to 
-compute the cross-validation score $C_{\rm cv}$ as a function of the regularization strength $\epsilon$.
-In the end, the PSF solution $X_{\epsilon}$ that minimizes this cross-validation cost function will be selected as the optimal solution.
-
-Although it is important to set the value of $\epsilon$ by minimizing a cross-validation score, in practice one can choose a 
-value for $\epsilon$ by ensuring that neither the negative log-likelihood nor the regularization term will dominate each other. 
-
-Choosing an arbitrarily large value of $\epsilon$ will drive the optimization procedure to only optimize the smoothness term, while choosing a very small 
-value of $\epsilon$ will make the smoothness regularization negligible. We found that with $\epsilon = 1000$, the contributions received from the two terms 
-of the right hand sides of Eq.~(\ref{eq:reg}) remain similar. Therefore in what follows in the remainder of this \paper\ we set $\epsilon$  to 1000.
-Furthermore, we only use the validation set (patches not used in estimating the PSF) for validating our PSF model and verifying our 
-methodology for masking the contribution of nearby stellar sources to patch fitting.  
-
-In Figure~\ref{fig:srpsf} we show our initialization of the super-resolution PSF method and our final estimate of the PSF found by
-minimizing Eq.~(\ref{eq:reg}). We note that in comparison to the final estimate of the PSF, our initial estimate based on scaling, shifting, 
-upsampling and averaging is very smooth. Additionally, the initial PSF misses many of the sharp features and structures that exist in the optimized solution, specially along the tails of the PSF.
-
-Performance of the method at modeling the patches in the training sample is demonstrated in Figures~\ref{fig:training_1},~\ref{fig:training_2},~\ref{fig:training_3},~\ref{fig:training_4}. 
-Note that, we have \emph{intentionally} selected isolated sources with relatively high signal-to-noise ratios for training our algorithm. In addition to the data and the scaled realization of the model at the native pixel grid, we show a $\chi$ map (a measure for the goodness-of-fit), and a map of various pixels across the patch that have been flagged by the observations or the model. Pixels with $\mathtt{FLAG}=0$ are the pixels used in PSF modeling. $\mathtt{FLAG}=1$ corresponds to pixels that where flagged in MAST data quality extensions. Finally, $\mathtt{FLAG}=2$ corresponds to the group of pixels for which $\chi^{2}_{\rm clip}>3$. 
-
-Figures~\ref{fig:training_1} and~\ref{fig:training_2} show examples of two relatively bright sources. Note that even in our training pixels, there are pixels that are ill-fit and are masked out according to the clipping criteria. Figures~\ref{fig:training_3},~\ref{fig:training_4} show the performance of our method at modeling the relatively low signal-to-noise ratio point sources in the training sample. We note that overall, the model shows a good performance at modeling these sources.
-
-The validation set consists of stellar sources that are mostly present in crowded fields. Majority of the patches in the validation set have either more than 
-one point source, or have light contamination by nearby sources. We have not used these sources in our PSF modeling but we show how our super-resolution PSF estimate 
-can be used in modeling the crowded astronomical scenes in the validation set. In each patch, we optimize the patch negative log-likelihood function given in Eq.~\ref{eq:patch} to 
-estimate the background sky, flux, and the centroid of the point source on the center of the patch. 
-
-Furthermore, we use the clipping criterion $\chi^{2}_{\rm clip}>3$ to mask out pixels for which the squared model residuals are larger than modified variance (\ref{eq:modified_variance}).
-Note that the masking procedure needs to be repeated at every realization of the patch model given in equation (\ref{eq:model}). After applying this clipping method to the validation set, we also decided to extend it in the following way: after every model realization and identifying the flagged pixels with $\chi^{2}_{\rm clip}>3$, we grow the flagged regions 
-in every direction by one pixel. We found this to be a more conservative choice and also better at capturing the pixels that receive light from the outer tails of the PSF from other stars. In what follows, we show examples for both the original and the extended versions of our masking algorithm.
-
-Examples of the performance of our model with a less conservative masking algorithm are shown in Figures~\ref{fig:validation_1},~\ref{fig:validation_2},~\ref{fig:validation_3},~\ref{fig:validation_4}. As it can be seen in Figs.~\ref{fig:validation_1},~\ref{fig:validation_2},~\ref{fig:validation_3}, the masking algorithm identifies majority of the pixels that are ill-fit with the PSF model (\ref{eq:model}) and prevents them from contributing to the $\chi$ map. However, there are still pixels that receive a small fraction of their brightness from the nearby point sources and are not masked out of the $\chi$ map. 
-
-Figure~\ref{fig:validation_4} demonstrates the most extreme case in which a tail of the PSF from a very bright nearby source is present in the patch and it is not completely masked out by the original clipping algorithm. This shows the need to adopt the more 
-conservative choice described above and grow the masked regions in every direction by one pixel.
-Figures~\ref{fig:validation_5},~\ref{fig:validation_6},~\ref{fig:validation_7} demonstrate patch-fitting examples in which a more conservative masking algorithm is adopted. Note that in these patches most of the light received from the nearby sources or the ill-fit pixels are almost completely removed from the $\chi$ map.
-
-\section{Summary and Discussion}\label{sec:hstsummary}
-
+\section{Summary}\label{sec:hstsummary}
 In this work, we have presented the first generative forward model of the observations of every point sources in the rich $\hst$ $\wfc$ IR dataset. 
 The point spread functions of $\wfc$ IR channels are the most undersampled amongst all $\hst$ channels. 
 The exercise of making highly accurate measurements of the shapes of faint and poorly resolved galaxies, accurate and precise astrometry and photometry of point sources, 
 correction of the variable sub-pixel response function ``flat-field'' of the telescope, and many other scientific applications require great knowledge of 
 the PSF at a resolution higher than what is sampled by the $\wfc$ IR detectors. 
 
-Our approach differs from the analysis developed for the \emph{Euclid satellite} presented in \citet{ngole,ngole2} in that it does not attempt to infer the super-resolution PSF in a wavelet basis and it does not imposes any sparsity regularization. It assumes a more general noise model that includes both the Gaussian pixel noise and the Poisson noise arising from the instrument gain.
-
-Our analysis is different than the approach of \citet{anderson2000} as we estimate the PSF by optimizing a well-motivated objective function 
-that is based on a generative forward model of the observations. However, they are similar in that they both require regularization of the PSF model after every iteration so that the degeneracy between the super-resolution PSF and the centroids of stars can be lifted. 
-The method presented in \citet{anderson2000} is based on shifting, averaging and eventually smoothing the PSF that does not involve optimizing any likelihood function.
-
-Furthermore, it is restricted to using only the isolated point sources and it is not prone to patches in which there is light contamination by the nearby sources. 
-The method presented in this \paper\ implements a rigorous treatment of every pixel that is ill-fit by the PSF model as a result of overlapping sources or light contamination by nearby sources. We implemented this by introducing a clipped $\chi^{2}_{\rm clip}$ that takes into account the model uncertainty. At every model realization throughout patch-fitting, pixels with $\chi^{2}_{\rm clip}$ more than a certain level are prevented from contributing to the likelihood function.
-
 PSF estimation and accurate point source photometry on a crowded field has two main challenges. \emph{First}: a large fraction of the pixels may not be usable for modeling purposes. This could lead to  significant information loss. \emph{Second}: using pixels that receive photons from multiple sources in modeling the PSF can bias the final PSF estimate. 
 Using a validation set containing many point sources in the crowded fields, we show that we can successfully use our technique to perform PSF-fitting. 
 This allows us to make optimal use of all the pixels in $\wfc$ IR observations of crowded fields.
 
-\section*{Acknowledgments}
+\acknowledgments
+We thank Michael Blanton, Daniel Foreman-Mackey, and Jay Anderson for discussions related to this work.  
 
-We are grateful to Jay~Anderson, Dan~Foreman-Mackey, Michael~Blanton, and Alex~Malz, and Michael~Blanton for discussions related to this work.
+\bibliographystyle{yahapj}
+\bibliography{references}
 
-%%%%%%%%%%%%%%%%%%%% FIGURES %%%%%%%%%%%%%%%%%%
+\appendix
+\section{appendix section}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PSF INITIAL AND FINAL
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\begin{figure*}
- \begin{tabular}{cc}
-\includegraphics[width=0.5\textwidth]{figures/wfc3ir/super0.png}
-\includegraphics[width=0.5\textwidth]{figures/wfc3ir/super2.png}
-\end{tabular}
-\caption{\label{fig:srpsf} Left: Demonstration of the initialization of the super-resolution PSF model. The initial PSF was constructed by scaling (background subtraction and flux normalization), shifting (through matched-filter polynomial centroiding), upsampling (with cubic spline interpolation), and averaging the isolated stars in the observation sample. 
-Right: Super-resolution PSF estimated by optimizing the likelihood function after six iterations. We note that the averaged upsampled initial PSF is smooth and lacks the sharp features visible across the full radian support of the PSF, specially the tails.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth , height=0.9\textwidth ]{figures/wfc3ir/training.pdf}
-\caption{\label{fig:training_1} An example of a patch containing a high signal-to-noise ratio star in the training set. Upper-left and upper-right panels show the data and the model respectively. The lower left panel shows $\chi$. The lower right panel shows the flagged pixels. Pixels with $\mathtt{FLAG}=0$ are used in PSF-fitting. Pixels with are $\mathtt{FLAG}=1$ (provided by the MAST data) are masked out prior to the analysis. Finally, pixels with $\mathtt{FLAG}=2$ correspond to the pixels in a given model realization with $\chi^{2}_{\rm clip} > 3$.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth , height=0.9\textwidth ]{figures/wfc3ir/training2.pdf}
-\caption{\label{fig:training_2} Same as Figure~\ref{fig:training_1} but showing a different high signal-to-noise ratio star in the training set.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth , height=0.9\textwidth ]{figures/wfc3ir/training3.pdf}
-\caption{\label{fig:training_3} Same as Figure~\ref{fig:training_1} but showing a low signal-to-noise ratio star in the training set.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth , height=0.9\textwidth ]{figures/wfc3ir/training4.pdf}
-\caption{\label{fig:training_4} Same as Figure~\ref{fig:training_1} but showing a different low signal-to-noise ratio star in the training set.}
-\end{figure*}
-
-%\begin{figure*}
-%\includegraphics[width=0.9\textwidth , height=0.9\textwidth ]{figures/wfc3ir/example1762.pdf}
-%\caption{\label{fig:validation_1} }
-%\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth , height=0.9\textwidth ]{figures/wfc3ir/example2.pdf}
-\caption{\label{fig:validation_1} An example of a patch in the validation set containing multiple point sources. Upper-left and upper-right panels show the data and the model respectively. The lower left panel shows the $\chi$ map. The lower right panel shows the flagged pixels. Pixels with $\mathtt{FLAG}=0$ are used in PSF-fitting. Pixels with $\mathtt{FLAG}=1$ (provided by the MAST data) are masked out prior to the analysis. Finally, pixels with $\mathtt{FLAG}=2$ correspond to the pixels in a given model realization with $\chi^{2}_{\rm clip} > 3$. In the lower left panel, pixels with  $\chi^{2}_{\rm clip} > 3$ are masked out from the $\chi$ map. Note that the point sources visible in the lower right and upper right corner of the data are masked out in the $\chi$ map. Here we do not grow the masked regions and therefore a small fraction of the light from the other point sources still contribute to the map.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth , height=0.9\textwidth ]{figures/wfc3ir/example5.pdf}
-\caption{\label{fig:validation_2} Same as Figure~\ref{fig:validation_1} but showing a different patch of sky.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth]{figures/wfc3ir/example7.pdf}
-\caption{\label{fig:validation_3} Same as Figure~\ref{fig:validation_1} but showing a different patch of sky. Two nearly overlapping faint point sources are present in this patch. 
-The clipping algorithm masks out the second star. Since we do not grow the masking regions in this example, it is likely that the second faint star could still have slight contribution to the $\chi$ map.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth]{figures/wfc3ir/example11.pdf}
-\caption{\label{fig:validation_4} Same as Figure~\ref{fig:validation_1} but showing a different patch of the sky and and a PSF diffraction spike from a nearby source whose centroid is not in the patch. The clipping algorithm masks out most of the pixels that are affected by the PSF tail from an external source. Once again, this demonstrates the need to adopt the more conservative masking algorithm that grows the clipped regions in every direction.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth]{figures/wfc3ir/example10.pdf}
-\caption{\label{fig:validation_5} Same as Figure~\ref{fig:validation_1} but showing a different patch of sky and a more \emph{conservative} clipping algorithm. Masked regions containing the pixels with $\chi^{2}_{\rm clip} > 3$ are grown in every direction with one pixel.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth]{figures/wfc3ir/example16.pdf}
-\caption{\label{fig:validation_6} Same as Figure~\ref{fig:validation_5} but showing a different patch of sky. The more \emph{conservative} clipping algorithm masks out pixels that are ill-fit given the downsampled PSF model given by Eq.~\ref{eq:model}.}
-\end{figure*}
-
-\begin{figure*}
-\includegraphics[width=0.9\textwidth]{figures/wfc3ir/example19.pdf}
-\caption{\label{fig:validation_7} Same as Figure~\ref{fig:validation_5} but showing a different patch of sky. Note that the pixels along the lower tails of the PSF receive light contribution from other point sources and are masked out in the $\chi$-map.}
-\end{figure*}
-
-
+\end{document}
