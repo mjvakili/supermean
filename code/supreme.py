@@ -9,7 +9,8 @@ import time
 f  = .05
 g  = .01
 fl = 1e-5
-F = h5py.File('sampler.h5','r') 
+F = h5py.File('samplerx3.hdf5','r') 
+#print F                  #loading file
 K = F["MyDataset"]
 
 class stuff(object):
@@ -67,7 +68,10 @@ class stuff(object):
         X = np.zeros_like(self.lnX)
         for i in range(self.N):
                           
-          self.B[i]   =  np.array([self.d2d[i,m/2-4:m/2+5,-1:].mean(),self.d2d[i,m/2-4:m/2+5,:1].mean(),self.d2d[i,:1,m/2-4:m/2+5].mean(),self.d2d[i,-1:,m/2-4:m/2+5].mean()]).mean()
+          self.B[i]   =  np.array([self.d2d[i,m/2-4:m/2+5,-1:].mean(),
+	                           self.d2d[i,m/2-4:m/2+5,:1].mean(),
+                                   self.d2d[i,:1,m/2-4:m/2+5].mean(),
+                                   self.d2d[i,-1:,m/2-4:m/2+5].mean()]).mean()
           
           self.dm[i]  =  self.data[i]-self.B[i]
           self.dm    -= self.dm.min()
@@ -80,7 +84,7 @@ class stuff(object):
           X += obs.flatten()   
           
         X /= self.N
-        X = X.flatten()
+        
         self.lnX = np.log(X)
         
      def grad_lnX(self , params , *args):
@@ -185,7 +189,7 @@ class stuff(object):
      def bfgs_lnX(self):
         x = op.fmin_l_bfgs_b(self.func_lnX,x0=self.lnX, fprime = self.grad_lnX,args=(self.F, self.B), approx_grad = False, \
                               bounds = None, m=10, factr=100., pgtol=1e-04, epsilon=1e-04, maxfun=60)
-        print x
+        #print xlbfgs scipy
         self.lnX  = x[0]
 
      def bfgs_F(self):
@@ -229,13 +233,19 @@ class stuff(object):
 
 
 
+            a = time.time()
             self.bfgs_F()
+            print time.time()-a
             obj = self.nll()
             print "NLL after F-step", obj
+            a = time.time()
             self.bfgs_lnX()
+            print time.time()-a
             obj = self.nll()
             print "NLL after X-step", obj
+            a = time.time()
             self.bfgs_B()
+            print time.time()-a
             obj = self.nll()
             print "NLL after B-step", obj
             

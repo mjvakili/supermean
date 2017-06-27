@@ -19,13 +19,16 @@ def phi(dx , H , M):
 
   a , b = 0. ,  1.
   h1 = (b-a)/(H*M-1)
+  #h2 = (b-a)/(M)
   h2 = (b-a)/(M-1)
   k = np.arange(1, H*M+3)
+  #x = np.linspace(0,1,M) + dx*h2
   x = np.arange(M)*h2+dx*h2
   k = k[None,:]
   x = x[:,None]
   y = (x - a)/h1 - k + 2 
   return interp.pi(y)
+
 """
 def imatrix(data,H):
   

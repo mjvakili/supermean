@@ -27,7 +27,7 @@ def objfunction(theta, masked_data, mask , sr_psf, flux, bkg, floor, gain, fl):
        only a function of superresolution psf, 
        so we do not include it here.
     """
-    Kp = sampler.imatrix_new(25, H, theta[0], theta[1])[: , mask]      # masked sampler
+    Kp = sampler.imatrix_new(25, 3, theta[0], theta[1])[: , mask]      # masked sampler
     model = flux*np.dot(sr_psf + fl , Kp) + bkg                        # maksed model
     var = floor + gain * np.abs(model)
     res  = masked_data - model

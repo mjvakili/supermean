@@ -61,7 +61,7 @@ interpolate = _spline.interpolate
 interpolate_2d = _spline.interpolate_2d
 cen = c3.find_centroid
 
-def shifter(data):
+def shifter(data , ox , oz):
   
   """
   input = image
@@ -88,7 +88,7 @@ def shifter(data):
   c = zeros((n1+3 , n2+3))           #initializing the place holder for spline coefficients
   cal_coefs(a2 , b2 , c_tmp.T , c.T)
   
-  ox , oz = c3.find_centroid(y)
+  #ox , oz = c3.find_centroid(y)
   
   
   #shifting the center of the grid to the center of the star

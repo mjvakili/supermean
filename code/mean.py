@@ -5,9 +5,11 @@ import sampler
 import numpy as np
 import scipy.optimize as op
 from scipy import ndimage
+import time
+import terminator
 f  = .05
 g  = .01
-fl = 1e-5
+#fl = 1e-5
 
 class stuff(object):
    
@@ -73,8 +75,40 @@ class stuff(object):
           shifted = shifter.shifter(self.dm[i], self.dx[i], self.dy[i])
           obs = ndimage.interpolation.zoom(shifted.reshape(25,25), self.H, output = None, order=3, mode='constant', cval=0.0, prefilter=True).flatten()
           
-        X += obs.flatten()   
+          
+          X += obs.flatten()   
+          
         X /= self.N
+        #X[X<0] = fl               #setting the initial negative pixels in X to fl                           
+        m = int((self.D)**.5)*self.H
+        X = X.reshape(m,m)
+        #X[m/2-15:m/2+15,m/2-15:m/2+15][X[m/2-15:m/2+15,m/2-15:m/2+15]<0] = np.median(X[m/2-15:m/2+15,m/2-15:m/2+15])
+        """
+        X[:m/2-10,m/2-10:m/2+10][X[:m/2-10,m/2-10:m/2+10]<0] = fl
+        X[m/2+10:,m/2-10:m/2+10][X[m/2+10:,m/2-10:m/2+10]<0] = fl
+        X[m/2-10:m/2+10,m/2+10:][X[m/2-10:m/2+10,m/2+10:]<0] = fl
+        X[m/2-10:m/2+10,:m/2-10][X[m/2-10:m/2+10,:m/2-10]<0] = fl
+        X[m/2+10:,:m/2-10][X[m/2+10:,:m/2-10]<0] = fl
+        X[m/2+10:,m/2+10:][X[m/2+10:,m/2+10:]<0] = fl
+        X[:m/2-10,m/2+10:][X[:m/2-10,m/2+10:]<0] = fl
+        X[:m/2-10,:m/2-10][X[:m/2-10,:m/2-10]<0] = fl"""
+        #X[X<0] = fl
+        #X+=fl
+        #print X.min()
+        #self.X[-1:,:]*=0
+        #self.X[:,0:1]*=0
+        #self.X[:,-1:]*=0
+        #print X.min()
+	
+        import pylab as p
+	from matplotlib.colors import LogNorm
+        p.imshow(X, interpolation = "None", norm = LogNorm() , origin = "lower")
+	p.colorbar()
+	p.xticks(())
+	p.yticks(())
+	p.show()
+        
+	X = X.flatten()
         self.lnX = np.log(X)
         
      def grad_lnX(self , params , *args):
@@ -96,7 +130,7 @@ class stuff(object):
         grad = 2.*self.epsilon*(4.*Z - c).flatten()
         grad = grad*self.X               
         
-        
+        #grad = np.zeros_like(self.X)
         for p in range(self.N):
          Kp = sampler.imatrix_new(self.M, self.H, self.dx[p], self.dy[p])
          modelp = self.F[p]*(self.X+fl).dot(Kp) + self.B[p]
@@ -212,8 +246,8 @@ class stuff(object):
      def update(self, max_iter, check_iter, min_iter, tol):
       
         np.savetxt("wfc_mean_iter_0.txt"       , self.lnX ,fmt='%.12f')
-        np.savetxt("wfc_flux_iter_0.txt"       , self.F ,fmt='%.12f')
-        np.savetxt("wfc_background_iter_0.txt" , self.B ,fmt='%.12f')
+        np.savetxt("wfc_flux_iter_0.txt"       , self.F   ,fmt='%.12f')
+        np.savetxt("wfc_background_iter_0.txt" , self.B   ,fmt='%.12f')
 
         print 'Starting NLL =', self.nll()
         nll = self.nll()
@@ -222,14 +256,19 @@ class stuff(object):
         for i in range(max_iter):
 
 
-
+            a = time.time()
             self.bfgs_F()
+            print time.time()-a
             obj = self.nll()
             print "NLL after F-step", obj
+            a = time.time()
             self.bfgs_lnX()
+            print time.time()-a
             obj = self.nll()
             print "NLL after X-step", obj
+            a = time.time()
             self.bfgs_B()
+            print time.time()-a
             obj = self.nll()
             print "NLL after B-step", obj
             

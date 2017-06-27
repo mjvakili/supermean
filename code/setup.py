@@ -18,3 +18,15 @@ setup(include_dirs=[numpy.get_include()],
       cmdclass={'build_ext': build_ext},
       ext_modules=ext_modules, 
       )
+"""
+
+from distutils.core import setup
+from Cython.Build import cythonize
+import os
+import numpy as np
+setup(
+    name = 'terminato',
+    ext_modules = cythonize(["terminator.pyx"]),
+    include_dirs=[np.get_include()]
+)
+"""
