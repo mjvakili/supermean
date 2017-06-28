@@ -195,11 +195,13 @@ N_i \sim \text{Poisson} \; (m_i),
 where $m_i$ is determined by the expected number of photons from the background sky and the astronomical objects (point sources in this study) that land on pixel $i$ at a given time interval, as well as the pixel-convolved PSF. 
 In the limit of a large number of photons, the central limit theorem implies that 
 $N_i$ must be Gaussian distributed with a mean and a variance given by $m_i$. 
-Therefore, $gN_i$ is Gaussian-distributed random variable with a mean and a variance given by $gm_i$:
+The expected value and the variance of the distribution that the variable $gN_i$ is drawn from are $gm_i$ and $g^2m_i$ respectively. 
+Therefore, in the limit of large number of photons, $gN_i$ is Gaussian-distributed random variable with a mean and a variance given by $gm_i$ and $g^2m_i$ respectively:
 
 \begin{eqnarray}
 gN_i &\sim& \mathcal{N}(\tilde{\mu}_i , \tilde{\sigma}_i^2), \;\;\; \text{for large}\;\;\; N_i\\
-\mu_i &=& \sigma_i^2 = gm_i
+\tilde{\mu}_i &=& gm_i, \\
+\tilde{\sigma}_i^2 &=& g^2m_i.
 \end{eqnarray}
 On the other hand, $e_i$ can be well described by a random variable with Gaussian distribution 
 \beq
@@ -210,11 +212,15 @@ the brightness of every detector pixel
 \begin{eqnarray}
 y_i &\sim& \mathcal{N}(\mu_i , \nu_i^{2}), \label{eq:yi1} \\
 \mu_i &=& gm_i, \label{eq:yi2} \\
-\nu_i^{2} &=& \sigma^{2} + gm_i. \label{eq:yi3} 
+\nu_i^{2} &=& \sigma^{2} + g^2m_i. \label{eq:yi3} 
 \end{eqnarray}
 
-Equations~\ref{eq:yi1},~\ref{eq:yi2},~\ref{eq:yi3} imply that the brightness of 
-
+By applying the transformation $m_i \rightarrow gm_i$, Eqs.~\ref{eq:yi1},~\ref{eq:yi2},~\ref{eq:yi3} can be rewritten as
+\begin{eqnarray}
+y_i &\sim& \mathcal{N}(\mu_i , \nu_i^{2}), \label{eq:yi1} \\
+\mu_i &=& m_i, \label{eq:yi2} \\
+\nu_i^{2} &=& \sigma^{2} + gm_i. \label{eq:yi3} 
+\end{eqnarray}
 \subsection{patch fitting}
 
 We aim to infer the super-resolution PSF of the $\wfc$-IR channel by optimizing a forward model 
