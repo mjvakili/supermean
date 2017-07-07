@@ -14,14 +14,16 @@ from nll_ctr import fit
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import sampler
+from scipy.signal import convolve2d
 
 F = h5py.File('samplerx3.hdf5','r')#["sampler"] 
 K = F["samplerx3"]
 Nthreads = 15  #number of threads
 
+""" Utility Functions"""
+
 def fg(args):
     return nll_grad_lnX(*args)
-
 
 def fit_single_patch(data, mask, psf, old_flux, old_back, floor, gain):
     C = floor + gain * np.abs(old_flux * psf + old_back)[mask]
@@ -31,6 +33,18 @@ def fit_single_patch(data, mask, psf, old_flux, old_back, floor, gain):
     ATICA = np.dot(AT, A / C[:, None])
     ATICY = np.dot(AT, data[mask] / C)
     return np.dot(np.linalg.inv(ATICA), ATICY)
+
+def grower(array):
+    """grows masked regions by one pixel
+    """
+    grower = np.array([[0,1,0],[1,1,1],[0,1,0]])   
+    ag = convolve2d(array , grower , mode = "same")
+    ag  = ag != 0
+    return ag   
+
+""" End of Utility Functions """
+
+""" PSF Inference Class """
 
 class infer(object):
    
@@ -48,8 +62,6 @@ class infer(object):
             f = floor variance of the nosie
             fl = floor of the PSF model                 
         """
-        #self.tr = tr
-	#self.ts = ts
         self.N = data.shape[0]             #number of observations
         self.D = data.shape[1]             #input dimensionality
         self.H = H                         #upsampling factor
@@ -67,7 +79,7 @@ class infer(object):
                                  N-dimensional centroid offset vector: dy
         """
                
-        iself.F = np.zeros((self.N))                 #Creating an N-dimensional Flux vector.
+        iself.F = np.zeros((self.N))                #Creating an N-dimensional Flux vector.
         self.B = np.zeros((self.N))                 #one flat-field per star 
         self.lnX = np.ones((self.D*self.H*self.H))  #log(X)
         self.dx = cx                                #list of centroid offsets x
@@ -126,6 +138,8 @@ class infer(object):
         self.lnX = np.log(X)
         self.f = 0.05
         self.g = 0.1
+        self.mg = np.array([[0,1,0],[1,1,1],[0,1,0]])
+      
 
      def write_pars_to_file(self, step):
 
@@ -142,6 +156,9 @@ class infer(object):
 
      def patch_nll(self, p, theta):
 
+         """Return NLL of patcht p
+         """
+
          X = np.exp(self.lnX)
          cx, cy , F, B, lf, lg = theta
          f = np.exp(lf)
@@ -149,104 +166,82 @@ class infer(object):
          Kp = sampler.imatrix_new(25, H, cx, cy)
          model = F*np.dot(fl+X,Kp) + B
          resi = (self.data[p,:] - model).reshape(25,25)
-         #res = (data[p,:] - model)*100/data[p,:]
-         #res = res.reshape(25,25)
          chisq = (self.data[p,:] - model)**2./(f+g*np.abs(model)) + np.log(f+g*np.abs(model))
          chi= (self.data[p,:] - model)/(f+g*np.abs(model)+1.*(model - B)**2.)**0.5
          maskp = self.mask[p,:]
          chisq = chisq.reshape(25,25)
          chi = chi.reshape(25,25)
          maskp = maskp.reshape(25,25) 
+         bol2 = maskp==0                    #masks bad pixels from MAST
          
-         bol2 = maskp==0 
+         #bol = np.abs(chi) < np.sqrt(3.0)  #chi-clipping masks
 
-         mast = np.where(chi>np.sqrt(3.))       
-         
-         bol = np.abs(chi) < np.sqrt(3.0)
+         bol = np.abs(chi) > np.sqrt(3.0)   #regions with modified chi-squared greater than three
+         bol = grower(bol)                  #growing the masked regions by one pixel to be more conservative
+         bol = ~bol + 2                     #flipping the bulian values of outliers masks : healthy = True(1), sick = False(0)
          healthy = bol * bol2       
 
-         chisq = chisq[healthy == True] #masking bad chi's
+         chisq = chisq[healthy == True]     #masking bad pixels and outliers from the chisq map
                   
          return np.sum(chisq)
 
-     
-
-     def lsq_update_FB(self):
-
-       """least square optimization of F&B"""
-       for p in range(self.N):
-         #fit_single_patch(data, mask, psf, old_flux, old_back, floor, gain)
-         Kp = np.array(K[str(p)])
-         mask = self.masks[p]
-         Y = self.data[p]
-         old_flux, old_back = self.F[p], self.B[p]
-         self.X = np.exp(self.lnX)
-         psf = np.dot(self.X + self.fl, Kp)
+     def patch_nll_grad_lnX(self, p, theta):
          
-         for i in range(10):
-              old_back, old_flux = fit_single_patch(Y, mask, psf, old_flux, old_back, self.f, self.g)
-         self.B[p], self.F[p] = old_back, old_flux
-
+         """Returns dnll(p)/dlnX
          """
-         modelp = np.dot(self.X + fl, K[p])
-         A = np.vstack([np.ones(self.D), modelp]).T
-         C = f + g*np.abs(modelp)
-         Y = self.data[p]
-         mask = self.masks[p]
-	 A = A[mask]
-	 C = C[mask]
-	 Y = Y[mask]
-         AT = A.T
-         # this is the idea : C[self.masks[p]] = np.inf
-         ATICA    = np.dot(AT, A/C[:,None])
-         factor = cho_factor(ATICA, overwrite_a = True)
-         x = cho_solve(factor, np.dot(AT, Y/C))
-         self.B[p], self.F[p] = x[0], x[1]         
-         """
-     def bfgs_update_FB(self):
-       
-       MS = h5py.File('masked_samplerx3.hdf5','r')
-       MD = h5py.File('masked_data.hdf5','r')
-       masked_samplers = MS["masked_samplerx3"]#[tr]
-       masked_data = MD["masked_data"]#[tr]
-
-       for p in range(self.N):
-	 #print masked_samplers				
-         Kp = masked_samplers[str(p)]
-         Y = masked_data[str(p)]
-	 theta = self.B[p], self.F[p]
-         psf = np.dot(np.exp(self.lnX) + self.fl, Kp)
-	 grad_func = v3_fit_single_patch
-         #print grad_func
-         x = op.fmin_l_bfgs_b(grad_func, x0=theta, fprime = None, \
-                             args=(Y, psf, self.f, self.g), approx_grad = False, \
-                             bounds = [(0.,100.), (1.,10.**7.)], m=10, factr=1000., pgtol=1e-08, epsilon=1e-08, maxfun=60)
-	 #print p, x
-         self.B[p], self.F[p] = x[0]
-       MS.close()
-       MD.close() 
+         
     
-     def update_centroids(self):
-       
-        MD = h5py.File('masked_data.hdf5','r')
-        masked_data = MD["masked_data"]
+     def patch_nll_fbxy(self, p, theta):
+
+         """Return NLL of patcht p as a function 
+            of f, b, x, y of patch p
+         """
+
+         X = np.exp(self.lnX)
+         xp, yp , fp, bp  = theta
+         Kp = sampler.imatrix_new(25, H, xp, yp)
+         model = fp * np.dot(fl+X, Kp) + bp
+         resi = (self.data[p,:] - model).reshape(25,25)
+         chisq = (self.data[p,:] - model)**2./(self.f + self.g*np.abs(model)) + np.log(self.f + self.g*np.abs(model))
+         chi= (self.data[p,:] - model)/(self.f + self.g*np.abs(model) + 1.*(model - bp)**2.)**0.5
+         maskp = self.mask[p,:]
+         chisq = chisq.reshape(25,25)
+         chi = chi.reshape(25,25)
+         maskp = maskp.reshape(25,25) 
+         bol2 = maskp==0                    #masks bad pixels from MAST
+         
+         #bol = np.abs(chi) < np.sqrt(3.0)  #chi-clipping masks
+
+         bol = np.abs(chi) > np.sqrt(3.0)   #regions with modified chi-squared greater than three
+         bol = grower(bol)                  #growing the masked regions by one pixel to be more conservative
+         bol = ~bol + 2                     #flipping the bulian values of outliers masks : healthy = True(1), sick = False(0)
+         healthy = bol * bol2       
+
+         chisq = chisq[healthy == True]     #masking bad pixels and outliers from the chisq map
+                  
+         return np.sum(chisq)
      
-        #updating the sampling matrices: we donot overwrite the original ones because 
-        #the new ones depende on the variance model, and the variance model is not 
-        #perfect at the moment!
+     def update_centroids(self, p, theta):
 
-        GG  = h5py.File('masked_samplerx3.hdf5','w')   
-        Grp = GG.create_group("masked_samplerx3")
-        for p in range(self.N):
-    
-          xp, yp = fit((self.dx[p], self.dy[p]), \
-                       masked_data[str(p)], self.masks[p], \
-                       self.X, self.F[p], self.B[p], \
-                       self.f, self.g, self.fl)
-          masked_dset = sampler.imatrix_new(self.M, self.H, xp , yp)[: , self.masks[p]]
-          Grp.create_dataset(str(p), data = masked_dset)
-        GG.close()
-        MD.close()
+         """update centroid of patch p
+         """
+         return None
+
+     def update_FB(self, p):
+
+        """update flux and background of patch p
+        """
+        return None
+     
+     def update_centroids_FB(self, p):
+
+        """update flux and background and centroids of patch p
+        """
+        return None
+
+     def total_nll_grad_lnX(self, params):
+
+       return None    
  
      def func_grad_lnX_Nthreads(self, params):
 
@@ -300,57 +295,6 @@ class infer(object):
         func  = self.epsilon*np.sum((Z[:,1:]-Z[:,:-1])**2.)+ self.epsilon*np.sum((Z[1:,:]-Z[:-1,:])**2.)
         return func , grad         
      
-     """
-     def func_lnX_grad_lnX(self, params , *args):
-
-           returns Gradient w.r.t Log(X) & NLL,
-           replaced by func_lnX_grad_lnX_Nthreads,
-           keeping this for sanity check for now
-         
-        self.data, self.F, self.B, K = args
-        self.lnX = params
-        
-        n_samples = self.data.shape[0]
-
-        self.X = np.exp(self.lnX)
-
-        b  = int((self.D)**.5)
-        Z = self.X.reshape((self.H*b, self.H*b))
-        c=np.zeros_like(Z)
-        c[:,:-1] += Z[:, 1:]
-        c[:, 1:] += Z[:,:-1]
-        c[1:, :] += Z[:-1,:]
-        c[:-1,:] += Z[1:, :]
-        grad = 2.*self.epsilon*(4.*Z - c).flatten()*self.X 
-        #grad = grad*self.X               
-        func  = self.epsilon*np.sum((Z[:,1:]-Z[:,:-1])**2.)+ self.epsilon*np.sum((Z[1:,:]-Z[:-1,:])**2.)
-        
-        for p in range(self.N):
-
-         Kp = np.array(K[str(p)])
-         Y = self.data[p]
-         modelp = self.F[p]*np.dot(self.X+self.fl, Kp) + self.B[p]
-         mask = self.masks[p]
-
-	 Y = Y[mask]
-         modelp = modelp[mask]
-         ep = Y - modelp
- 
-         varp = self.f + self.g*np.abs(modelp)
-         gradp = -1.*self.F[p]*Kp
-         
-         gradp = gradp[:,mask]
-
-         gainp = (self.g/2.)*(varp**-1. - ep**2./varp**2.)
-	 
-         gradp = self.X[:,None]*gradp*(ep/varp - gainp)[None,:]
-         Gradp = gradp.sum(axis = 1) 
-         grad += Gradp
-         func += 0.5*np.sum(((ep)**2.)/varp) + .5*np.sum(np.log(varp))
-	
-        return func, grad
-     """
-     """
      def grad_lnX(self, params , *args):
 
       
@@ -365,61 +309,6 @@ class infer(object):
         self.F, self.B = args
         self.lnX = params
         return self.func_lnX_grad_lnx[0]
-     
-     def grad_F(self, params, *args):
-
-      
-
-        self.lnX, self.B = args
-        self.F = params
-        
-        self.X = np.exp(self.lnX)
-        
-        grad = np.zeros_like(self.F)
-        
-        for p in range(self.N):
-        
-         Kp = K[p]
-         y = self.data[p]
-         mask = self.masks[p]
-         nmodelp = np.dot(self.X+fl,Kp)
-         modelp = self.F[p]*nmodelp + self.B[p]
-        
-         y = y[mask]
-	 nmodelp = nmodelp[mask]
-	 modelp = modelp[mask]
-
-         residualp = y - modelp
-         #residualp[self.mask[p]!=0] = 0   #excluding flagged pixels from contributing to gradient_X
-         varp = f + g*np.abs(modelp)
-         gradp = -1.*nmodelp
-         gainp = (g/2.)*nmodelp*(varp**-1. - residualp**2./varp**2.)
-         #gainp[modelp<0] *= -1.   #var=f+g|model| to account for numerical artifacts when sr model is sampled at the data grid
-         grad[p] = np.sum(residualp*gradp/varp) + np.sum(gainp)
-        return grad
-      
-     def grad_B(self, params, *args):
-
-        self.lnX, self.F = args
-        self.B = params
-
-        self.X = np.exp(self.lnX)
-
-        grad = np.zeros_like(self.B)
-        for p in range(self.N):
-         y = self.data[p]
-         Kp = K[p]
-         modelp = self.F[p]*np.dot(self.X+fl,Kp) + self.B[p]
-         mask = self.masks[p]
-         y = y[mask]
-         modelp = modelp[mask]
-         varp = f+g*np.abs(modelp)
-         residualp = y - modelp
-         #residualp[self.mask[p]!=0] = 0   #excluding flagged pixels from contributing to gradient_X
-         gainp = - (g/2.)*(residualp**2./varp**2.) + (g/2.)*(varp**-1.)
-         #gainp[modelp<0] *= -1.   #var=f+g|model| to account for numerical artifacts when sr model is sampled at the data grid   
-         grad[p] = -1.*np.sum(residualp/varp) + np.sum(gainp)      
-        return grad
     
      def func_F(self , params, *args):
         self.lnX, self.B = args
@@ -430,7 +319,6 @@ class infer(object):
         self.lnX, self.F = args
         self.B = params
         return self.nll()
-     """
 
      def bfgs_lnX(self, num_funccalls):
        
@@ -438,12 +326,7 @@ class infer(object):
                              args=(), approx_grad = False, \
                              bounds = [(np.log(1e-5), 0.) for _ in self.lnX], m=10, factr=10.0, pgtol=1e-5, epsilon=1e-8, maxfun=num_funccalls)
         gx = x[2]["grad"]
-        print x
         print gx
-        #X = np.exp(self.lnX).reshape(self.H*self.M ,self.H*self.M) + self.fl
-        #plt.imshow(np.abs(gx).reshape(100,100), interpolation = None, norm = LogNorm())
-        #plt.colorbar()
-        #plt.show()
         self.lnX  = x[0]
 
      def bfgs_F(self):
@@ -500,39 +383,6 @@ class infer(object):
             np.savetxt("superb_wfc_mean_iter_%d_nfljadid.txt"%(i)       , self.lnX ,fmt='%.64f')
             np.savetxt("superb_wfc_flux_iter_%d_nfjadid.txt"%(i)       , self.F ,fmt='%.64f')
 	    np.savetxt("superb_wfc_bkg_iter_%d_nfljadid.txt"%(i)        , self.B ,fmt='%.64f')
-            """
-            if (i==max_iter):
-             X = (np.exp(self.lnX)+self.fl).reshape(self.H*self.M ,self.H*self.M)
-             plt.imshow(X , interpolation = None , norm = LogNorm())
-             plt.title(r"$X_{\mathtt{final}}$")
-             plt.colorbar()
-             plt.xticks(())
-             plt.yticks(())
-             plt.show()"""
-             #np.savetxt("superb_wfc_mean_iter_%d.txt"%(i+1)       , self.lnX ,fmt='%.64f')
-            """  
-             gradx = self.func_grad_lnX_Nthreads(self.lnX)[1].reshape(75,75)
-             plt.imshow(np.abs(gradx) , interpolation = None , norm = LogNorm())
-             plt.title(r"$|d\mathtt{NLL}/d(\mathtt{lnX})|_{\mathtt{final}}$")
-             plt.colorbar()
-             plt.xticks(())
-             plt.yticks(())
-             plt.show()"""
-             
-            """
-	    a = time.time()
-            W = self.func_lnX_grad_lnX(self.lnX, self.data, self.F, self.B, K )
-            print time.time() - a
-            print W
-            
-	    a = time.time()
-	    Q = self.func_lnX_grad_lnX_Nthreads(self.lnX)
-            #self.fl, self.f, self.g, self.H, Nthreads = args
-	    print time.time() - a
-	    print Q
-            
-	    print Q[0] - W[0], np.sum((Q[1] - W[1])**2.)s
-            """
             if np.mod(i, check_iter) == 0:
                 new_nll =  new_nll = self.nll()
                 print 'NLL at step %d is:' % (i+1), new_nll
